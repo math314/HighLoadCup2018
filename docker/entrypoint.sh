@@ -3,9 +3,10 @@
 echo "starting..."
 
 # start mysql
-/usr/local/bin/docker-entrypoint.sh mysqld &
+/usr/local/bin/docker-entrypoint.sh mysqld --character-set-server=utf8mb4 &
 
 /root/docker/wait_mysql.sh
 
 # start go app
-/root/hlc
+/root/bin/loader
+/root/bin/hlc
