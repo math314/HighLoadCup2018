@@ -98,6 +98,17 @@ type Account struct {
 	Joined        int    `json:"joined"`
 }
 
+type Interest struct {
+	AccountId int
+	interest  string
+}
+
+type Like struct {
+	AccountIdFrom int
+	AccountIdTo   int
+	Ts            int
+}
+
 type OneLineBuilder struct {
 	b strings.Builder
 }
@@ -145,6 +156,21 @@ func (a *Account) oneline() string {
 	return olb.build()
 }
 
+func (i *Interest) oneline() string {
+	olb := OneLineBuilder{strings.Builder{}}
+	olb.appendInt(i.AccountId)
+	olb.appendString(i.interest)
+	return olb.build()
+}
+
+func (l *Like) oneline() string {
+	olb := OneLineBuilder{strings.Builder{}}
+	olb.appendInt(l.AccountIdFrom)
+	olb.appendInt(l.AccountIdTo)
+	olb.appendInt(l.Ts)
+	return olb.build()
+}
+
 func sliceIndex(s []string, val string) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] == val {
@@ -154,12 +180,15 @@ func sliceIndex(s []string, val string) int {
 	return -1
 }
 
-func loadDataInFile(tableName string, data []byte) {
+func loadDataInFile(tableName string, fields string, data []byte) {
 	if err := ioutil.WriteFile("/tmp/tmpload.txt", data, 0644); err != nil {
 		log.Fatal(err)
 	}
 
 	query := fmt.Sprintf("LOAD DATA INFILE '/tmp/tmpload.txt' INTO TABLE %s FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'", tableName)
+	if fields != "" {
+		query = fmt.Sprintf("%s %s", query, fields)
+	}
 	result, err := db.Exec(query)
 	if err != nil {
 		log.Fatal(err)
@@ -193,6 +222,8 @@ func main() {
 
 		type msi map[string]interface{}
 		accounts := make([]Account, 0)
+		interests := make([]Interest, 0)
+		likes := make([]Like, 0)
 
 		for _, rawAccount := range ac.Accounts {
 			var a Account
@@ -210,14 +241,35 @@ func main() {
 			a.Country = rawAccount.Country
 			a.Joined = rawAccount.Joined
 			accounts = append(accounts, a)
+
+			for _, i := range rawAccount.Interests {
+				interest := Interest{a.ID, i}
+				interests = append(interests, interest)
+			}
+
+			for _, l := range rawAccount.Likes {
+				like := Like{a.ID, l.ID, l.Ts}
+				likes = append(likes, like)
+			}
 		}
 
 		sb := bytes.Buffer{}
 		for _, a := range accounts {
 			sb.WriteString(a.oneline())
 		}
+		loadDataInFile("accounts", "", sb.Bytes())
 
-		loadDataInFile("accounts", sb.Bytes())
+		sb = bytes.Buffer{}
+		for _, i := range interests {
+			sb.WriteString(i.oneline())
+		}
+		loadDataInFile("interests", "(account_id, interest)", sb.Bytes())
+
+		sb = bytes.Buffer{}
+		for _, l := range likes {
+			sb.WriteString(l.oneline())
+		}
+		loadDataInFile("likes", "(account_id_from, account_id_to, ts)", sb.Bytes())
 	}
 
 }
