@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+/usr/local/bin/docker-entrypoint.sh mysqld --character-set-server=utf8mb4 &
+
 # wait until MySQL is really available
 maxcounter=360
 

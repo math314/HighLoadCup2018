@@ -65,16 +65,6 @@ func init() {
 	log.Printf("Succeeded to connect db.")
 }
 
-type X struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-func indexHandler(c echo.Context) error {
-	x := X{"1", "user name"}
-	return c.JSON(http.StatusOK, x)
-}
-
 type sqlBuilder struct {
 	where bytes.Buffer
 	limit int
@@ -392,7 +382,7 @@ func accountsFilterCore(queryParams url.Values) (*AccountsFilterAccount, *Filter
 func accountsFilterHandler(c echo.Context) error {
 	afas, err := accountsFilterCore(c.QueryParams())
 	if err != nil {
-		return c.JSON(err.httpStatusCode, map[string]interface{}{})
+		return c.String(err.httpStatusCode, "")
 	}
 
 	return c.JSON(http.StatusOK, afas)
@@ -506,7 +496,6 @@ func httpMain() {
 		Format: "request:\"${method} ${uri}\" status:${status} latency:${latency} (${latency_human}) bytes:${bytes_out}\n",
 	}))
 
-	e.GET("/", indexHandler)
 	e.GET("/accounts/filter", accountsFilterHandler)
 	e.GET("/accounts/group", accountsGroupHandler)
 	e.GET("/accounts/:id/recommend/", accountsRecommendHandler)
