@@ -8,5 +8,5 @@ echo "starting..."
 /root/docker/wait_mysql.sh
 
 # start go app
-/root/bin/loader
+/root/bin/hlc -l
 /root/bin/hlc

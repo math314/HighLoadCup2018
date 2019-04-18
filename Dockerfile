@@ -9,7 +9,7 @@ RUN mkdir go && mkdir go/src && mkdir go/bin && mkdir go/pkg && \
 
 ENV GOPATH=/root/go
 ADD src go/src
-RUN go build -o go/bin/hlc go/src/hlc2018/main.go && go build -o go/bin/loader go/src/hlc2018/mysqlDataLoader.go
+RUN go build -o go/bin/hlc go/src/hlc2018/main.go
 
 # prepare mysql
 FROM mysql:5.7
@@ -23,4 +23,5 @@ ADD db/my.cnf /etc/mysql/conf.d/additional.cnf
 
 ENTRYPOINT /root/docker/entrypoint.sh
 
-EXPOSE 3306 8080
+ENV PORT=80
+EXPOSE 3306 80
