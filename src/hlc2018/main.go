@@ -371,7 +371,10 @@ func accountsFilterCore(queryParams url.Values) (*AccountsFilterAccount, *Filter
 	query := fmt.Sprintf("SELECT id, email FROM accounts %s ORDER BY id DESC LIMIT %d", whereCluster, sb.limit)
 	log.Printf("query := %s", query)
 
-	afas := AccountsFilterAccount{}
+	afas := AccountsFilterAccount{Accounts: []struct {
+		Email string `json:"email"`
+		ID    int    `json:"id"`
+	}{}}
 	if err := db.Select(&afas.Accounts, query); err != nil {
 		log.Print(err)
 		return &AccountsFilterAccount{}, &FilterError{http.StatusInternalServerError, err}
@@ -448,7 +451,7 @@ func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json str
 }
 
 func testAccountsFilter(c echo.Context) error {
-	loadAnsw(`/accounts/filter`, func(url *url.URL, status int, j string) {
+	loadAnsw(`/accounts/filter/`, func(url *url.URL, status int, j string) {
 		ansAfa := AccountsFilterAccount{}
 		if status == 200 {
 			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
@@ -496,8 +499,8 @@ func httpMain() {
 		Format: "request:\"${method} ${uri}\" status:${status} latency:${latency} (${latency_human}) bytes:${bytes_out}\n",
 	}))
 
-	e.GET("/accounts/filter", accountsFilterHandler)
-	e.GET("/accounts/group", accountsGroupHandler)
+	e.GET("/accounts/filter/", accountsFilterHandler)
+	e.GET("/accounts/group/", accountsGroupHandler)
 	e.GET("/accounts/:id/recommend/", accountsRecommendHandler)
 	e.GET("/accounts/:id/suggest/", accountsSuggestHandler)
 	e.POST("/accounts/new/", accountsNewHandler)
