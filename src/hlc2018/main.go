@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -98,17 +100,17 @@ func emailDomainFilter(param string, sb *sqlBuilder) error {
 	if strings.Contains(param, "%") {
 		return fmt.Errorf("domain (%s) cannot contain \"%%\"", param)
 	}
-	sb.addWhere(fmt.Sprintf("email like %s", "%"+param))
+	sb.addWhere(fmt.Sprintf("email like \"%s\"", "%"+param))
 	return nil
 }
 
 func emailLtFilter(param string, sb *sqlBuilder) error {
-	sb.addWhere(fmt.Sprintf("email >= %s", param))
+	sb.addWhere(fmt.Sprintf("email >= \"%s\"", param))
 	return nil
 }
 
 func emailGtFilter(param string, sb *sqlBuilder) error {
-	sb.addWhere(fmt.Sprintf("email <= %s", param))
+	sb.addWhere(fmt.Sprintf("email <= \"%s\"", param))
 	return nil
 }
 
@@ -141,7 +143,7 @@ func fnameAnyFilter(param string, sb *sqlBuilder) error {
 }
 
 func snameStartsFilter(param string, sb *sqlBuilder) error {
-	sb.addWhere(fmt.Sprintf("sname LIKE %s", param+"%"))
+	sb.addWhere(fmt.Sprintf("sname LIKE \"%s\"", param+"%"))
 	return nil
 }
 
@@ -154,7 +156,7 @@ func phoneCodeFilter(param string, sb *sqlBuilder) error {
 			return fmt.Errorf("phone code param should be [0-9] : %s", param)
 		}
 	}
-	sb.addWhere(fmt.Sprintf("phone LIKE %s", "%("+param+")%"))
+	sb.addWhere(fmt.Sprintf("phone LIKE \"%s\"", "%("+param+")%"))
 	return nil
 }
 
@@ -263,7 +265,7 @@ type FilterFunc func(param string, sb *sqlBuilder) error
 
 func eqFilterGenerator(name string) FilterFunc {
 	return func(param string, sb *sqlBuilder) error {
-		sb.addWhere(fmt.Sprintf("%s = %s", name, param))
+		sb.addWhere(fmt.Sprintf("%s = \"%s\"", name, param))
 		return nil
 	}
 }
@@ -345,19 +347,37 @@ type AccountsFilterAccount struct {
 	} `json:"accounts"`
 }
 
-func accountsFilterHandler(c echo.Context) error {
-	sb, err := accountsFilter(c.QueryParams())
+type FilterError struct {
+	httpStatusCode int
+	Err            error
+}
+
+func (e *FilterError) Error() string {
+	return "status: " + strconv.Itoa(e.httpStatusCode) + ", error: " + e.Err.Error()
+}
+
+func accountsFilterCore(queryParams url.Values) (*AccountsFilterAccount, *FilterError) {
+	sb, err := accountsFilter(queryParams)
 	if err != nil {
 		log.Print(err)
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{})
+		return &AccountsFilterAccount{}, &FilterError{http.StatusBadRequest, err}
 	}
 	query := fmt.Sprintf("SELECT id, email FROM accounts WHERE %s ORDER BY id LIMIT %d", sb.where.String(), sb.limit)
 
 	afas := AccountsFilterAccount{}
 	if err := db.Select(&afas.Accounts, query); err != nil {
 		log.Print(err)
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{})
+		return &AccountsFilterAccount{}, &FilterError{http.StatusInternalServerError, err}
 	}
+	return &afas, nil
+}
+
+func accountsFilterHandler(c echo.Context) error {
+	afas, err := accountsFilterCore(c.QueryParams())
+	if err != nil {
+		return c.JSON(err.httpStatusCode, map[string]interface{}{})
+	}
+
 	return c.JSON(http.StatusOK, afas)
 }
 
@@ -385,6 +405,76 @@ func accountsLikesHandler(c echo.Context) error {
 	return nil
 }
 
+func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json string)) {
+	fp, err := os.Open("./testdata/answers/phase_1_get.answ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fp.Close()
+
+	r := regexp.MustCompile(pathRegex)
+	scanner := bufio.NewScanner(fp)
+	for scanner.Scan() {
+		line := scanner.Text()
+		tmp := strings.Split(line, "\t")
+		url, err := url.Parse(tmp[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !r.MatchString(url.Path) {
+			continue
+		}
+
+		status, err := strconv.Atoi(tmp[2])
+		if err != nil {
+			log.Fatal(err)
+		}
+		j := ""
+		if len(tmp) > 3 {
+			j = tmp[3]
+		}
+		callback(url, status, j)
+	}
+	if err := scanner.Err(); err != nil {
+		panic(err)
+	}
+}
+
+func testAccountsFilter(c echo.Context) error {
+	loadAnsw(`/accounts/filter`, func(url *url.URL, status int, j string) {
+		ansAfa := AccountsFilterAccount{}
+		if status == 200 {
+			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		afa, err := accountsFilterCore(url.Query())
+		if status != 200 {
+			if err == nil || status != err.httpStatusCode {
+				log.Fatal(url, "status mismatch")
+			}
+			return
+		}
+
+		if err != nil {
+			log.Fatal(url, err)
+		}
+
+		mp := map[int]string{}
+		for _, a := range afa.Accounts {
+			mp[a.ID] = a.Email
+		}
+		for _, a := range ansAfa.Accounts {
+			if mp[a.ID] != a.Email {
+				log.Printf("id = %d not found", a.ID)
+			}
+		}
+	})
+
+	return c.HTML(http.StatusOK, "tested")
+}
+
 func httpMain() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -404,6 +494,8 @@ func httpMain() {
 	e.POST("/accounts/new/", accountsNewHandler)
 	e.POST("/accounts/:id/", accountsIdHandler)
 	e.POST("/accounts/likes/", accountsLikesHandler)
+
+	e.GET("/tests/filter", testAccountsFilter)
 	e.Start(":" + port)
 }
 
