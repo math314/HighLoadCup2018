@@ -105,12 +105,12 @@ func emailDomainFilter(param string, sb *sqlBuilder) error {
 }
 
 func emailLtFilter(param string, sb *sqlBuilder) error {
-	sb.addWhere(fmt.Sprintf("email >= \"%s\"", param))
+	sb.addWhere(fmt.Sprintf("email <= \"%s\"", param))
 	return nil
 }
 
 func emailGtFilter(param string, sb *sqlBuilder) error {
-	sb.addWhere(fmt.Sprintf("email <= \"%s\"", param))
+	sb.addWhere(fmt.Sprintf("email >= \"%s\"", param))
 	return nil
 }
 
@@ -203,9 +203,9 @@ func birthYearFilter(param string, sb *sqlBuilder) error {
 }
 
 func premiumNowFilter(param string, sb *sqlBuilder) error {
-	y, m, d := time.Now().In(time.UTC).Date()
-	from := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-	after := time.Date(y, m, d+1, 0, 0, 0, 0, time.UTC)
+	//y, m, d := time.Now().In(time.UTC).Date()
+	from := time.Date(2019, 1, 24, 0, 0, 0, 0, time.UTC)
+	after := time.Date(2019, 1, 25, 0, 0, 0, 0, time.UTC)
 
 	sb.addWhere(fmt.Sprintf("premium_start <= %d", from.Unix()))
 	sb.addWhere(fmt.Sprintf("premium_end >= %d", after.Unix()))
@@ -239,8 +239,8 @@ func interestsContainsFilter(param string, sb *sqlBuilder) error {
 	}
 	arg := strings.Join(names, ",")
 
-	paramLen := strings.Count(param, ",")
-	sb.addWhere(fmt.Sprintf("id in (SELECT DISTINCT(account_id) from interests WHERE interest in (%s) HAVING COUNT(account_id) = %d)", arg, paramLen))
+	paramLen := strings.Count(param, ",") + 1
+	sb.addWhere(fmt.Sprintf("id in (SELECT account_id from interests WHERE interest in (%s) GROUP BY account_id HAVING COUNT(account_id) = %d)", arg, paramLen))
 	return nil
 }
 
@@ -252,8 +252,19 @@ func likesContainsFilter(param string, sb *sqlBuilder) error {
 		}
 	}
 
-	paramLen := strings.Count(param, ",")
-	sb.addWhere(fmt.Sprintf("id in (SELECT DISTINCT(account_id_from) from likes WHERE account_id_to in (%s) HAVING COUNT(account_id_from) = %d)", param, paramLen))
+	paramLen := strings.Count(param, ",") + 1
+	sb.addWhere(fmt.Sprintf("id in (SELECT account_id_from from likes WHERE account_id_to in (%s) GROUP BY account_id_from HAVING COUNT(account_id_from) = %d)", param, paramLen))
+	return nil
+}
+
+func premiumNullFilter(param string, sb *sqlBuilder) error {
+	if param == "0" {
+		sb.addWhere("premium_start != 0")
+	} else if param == "1" {
+		sb.addWhere("premium_start = 0")
+	} else {
+		return fmt.Errorf("premium param is not valid (%s)", param)
+	}
 	return nil
 }
 
@@ -310,7 +321,7 @@ var usualFilters = map[string]FilterFunc{
 	"interests_any":      interestsAnyFilter,
 	"likes_contains":     likesContainsFilter,
 	"premium_now":        premiumNowFilter,
-	"premium_null":       nullFilterGenerator("premium_start"),
+	"premium_null":       premiumNullFilter,
 	"limit":              limitFilter,
 	"query_id":           noopFilter,
 }
@@ -362,7 +373,13 @@ func accountsFilterCore(queryParams url.Values) (*AccountsFilterAccount, *Filter
 		log.Print(err)
 		return &AccountsFilterAccount{}, &FilterError{http.StatusBadRequest, err}
 	}
-	query := fmt.Sprintf("SELECT id, email FROM accounts WHERE %s ORDER BY id LIMIT %d", sb.where.String(), sb.limit)
+	whereCluster := ""
+	if sb.where.Len() != 0 {
+		whereCluster = "WHERE " + sb.where.String()
+	}
+
+	query := fmt.Sprintf("SELECT id, email FROM accounts %s ORDER BY id DESC LIMIT %d", whereCluster, sb.limit)
+	log.Printf("query := %s", query)
 
 	afas := AccountsFilterAccount{}
 	if err := db.Select(&afas.Accounts, query); err != nil {
@@ -465,11 +482,14 @@ func testAccountsFilter(c echo.Context) error {
 		for _, a := range afa.Accounts {
 			mp[a.ID] = a.Email
 		}
+		idsStr := []string{}
 		for _, a := range ansAfa.Accounts {
+			idsStr = append(idsStr, strconv.Itoa(a.ID))
 			if mp[a.ID] != a.Email {
 				log.Printf("id = %d not found", a.ID)
 			}
 		}
+		log.Print(strings.Join(idsStr, ","))
 	})
 
 	return c.HTML(http.StatusOK, "tested")
