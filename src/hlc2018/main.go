@@ -66,22 +66,28 @@ func init() {
 }
 
 type sqlBuilder struct {
-	where bytes.Buffer
-	limit int
+	selects map[string]struct{}
+	wheres  bytes.Buffer
+	limit   int
+}
+
+func (sb *sqlBuilder) addSelect(s string) {
+	sb.selects[s] = struct{}{}
 }
 
 func (sb *sqlBuilder) addWhere(s string) {
-	if sb.where.Len() != 0 {
-		sb.where.WriteString(" AND ")
+	if sb.wheres.Len() != 0 {
+		sb.wheres.WriteString(" AND ")
 	}
-	sb.where.WriteString(s)
+	sb.wheres.WriteString(s)
 }
 
 func SexEqFilter(param string, sb *sqlBuilder) error {
 	sex := common.SexFromString(param)
-	if sex == -1 {
+	if sex == 0 {
 		return fmt.Errorf("%s is not valid sex", param)
 	}
+	sb.addSelect("sex")
 	sb.addWhere(fmt.Sprintf("sex = %d", sex))
 	return nil
 }
@@ -90,39 +96,45 @@ func emailDomainFilter(param string, sb *sqlBuilder) error {
 	if strings.Contains(param, "%") {
 		return fmt.Errorf("domain (%s) cannot contain \"%%\"", param)
 	}
+	sb.addSelect("email")
 	sb.addWhere(fmt.Sprintf("email like \"%s\"", "%"+param))
 	return nil
 }
 
 func emailLtFilter(param string, sb *sqlBuilder) error {
+	sb.addSelect("email")
 	sb.addWhere(fmt.Sprintf("email <= \"%s\"", param))
 	return nil
 }
 
 func emailGtFilter(param string, sb *sqlBuilder) error {
+	sb.addSelect("email")
 	sb.addWhere(fmt.Sprintf("email >= \"%s\"", param))
 	return nil
 }
 
 func StatusEqFilter(param string, sb *sqlBuilder) error {
 	status := common.StatusFromString(param)
-	if status == -1 {
+	if status == 0 {
 		return fmt.Errorf("%s is not valid status", param)
 	}
+	sb.addSelect("status")
 	sb.addWhere(fmt.Sprintf("status = %d", status))
 	return nil
 }
 
 func StatusNeqFilter(param string, sb *sqlBuilder) error {
 	status := common.StatusFromString(param)
-	if status == -1 {
+	if status == 0 {
 		return fmt.Errorf("%s is not valid status", param)
 	}
+	sb.addSelect("status")
 	sb.addWhere(fmt.Sprintf("status != %d", status))
 	return nil
 }
 
 func fnameAnyFilter(param string, sb *sqlBuilder) error {
+	sb.addSelect("fname")
 	names := strings.Split(param, ",")
 	for i := 0; i < len(names); i++ {
 		names[i] = "\"" + names[i] + "\""
@@ -133,6 +145,7 @@ func fnameAnyFilter(param string, sb *sqlBuilder) error {
 }
 
 func snameStartsFilter(param string, sb *sqlBuilder) error {
+	sb.addSelect("sname")
 	sb.addWhere(fmt.Sprintf("sname LIKE \"%s\"", param+"%"))
 	return nil
 }
@@ -146,6 +159,7 @@ func phoneCodeFilter(param string, sb *sqlBuilder) error {
 			return fmt.Errorf("phone code param should be [0-9] : %s", param)
 		}
 	}
+	sb.addSelect("phone")
 	sb.addWhere(fmt.Sprintf("phone LIKE \"%s\"", "%("+param+")%"))
 	return nil
 }
@@ -157,6 +171,7 @@ func cityAnyFilter(param string, sb *sqlBuilder) error {
 	}
 	arg := strings.Join(names, ",")
 
+	sb.addSelect("city")
 	sb.addWhere(fmt.Sprintf("city in (%s)", arg))
 	return nil
 }
@@ -166,6 +181,7 @@ func birthLtFilter(param string, sb *sqlBuilder) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse birth (%s)", param)
 	}
+	sb.addSelect("birth")
 	sb.addWhere(fmt.Sprintf("birth < %d", birth))
 	return nil
 }
@@ -175,6 +191,7 @@ func birthGtFilter(param string, sb *sqlBuilder) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse birth (%s)", param)
 	}
+	sb.addSelect("birth")
 	sb.addWhere(fmt.Sprintf("birth > %d", birth))
 	return nil
 }
@@ -187,6 +204,7 @@ func birthYearFilter(param string, sb *sqlBuilder) error {
 	from := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 	after := time.Date(year+1, 1, 1, 0, 0, 0, 0, time.UTC)
 
+	sb.addSelect("birth")
 	sb.addWhere(fmt.Sprintf("birth >= %d", from.Unix()))
 	sb.addWhere(fmt.Sprintf("birth < %d", after.Unix()))
 	return nil
@@ -197,8 +215,25 @@ func premiumNowFilter(param string, sb *sqlBuilder) error {
 	from := time.Date(2019, 1, 24, 0, 0, 0, 0, time.UTC)
 	after := time.Date(2019, 1, 25, 0, 0, 0, 0, time.UTC)
 
+	sb.addSelect("premium_start")
+	sb.addSelect("premium_end")
 	sb.addWhere(fmt.Sprintf("premium_start <= %d", from.Unix()))
 	sb.addWhere(fmt.Sprintf("premium_end >= %d", after.Unix()))
+	return nil
+}
+
+func premiumNullFilter(param string, sb *sqlBuilder) error {
+	if param == "0" {
+		sb.addSelect("premium_start")
+		sb.addSelect("premium_end")
+		sb.addWhere("premium_start != 0")
+	} else if param == "1" {
+		sb.addSelect("premium_start")
+		sb.addSelect("premium_end")
+		sb.addWhere("premium_start = 0")
+	} else {
+		return fmt.Errorf("premium param is not valid (%s)", param)
+	}
 	return nil
 }
 
@@ -247,17 +282,6 @@ func likesContainsFilter(param string, sb *sqlBuilder) error {
 	return nil
 }
 
-func premiumNullFilter(param string, sb *sqlBuilder) error {
-	if param == "0" {
-		sb.addWhere("premium_start != 0")
-	} else if param == "1" {
-		sb.addWhere("premium_start = 0")
-	} else {
-		return fmt.Errorf("premium param is not valid (%s)", param)
-	}
-	return nil
-}
-
 func noopFilter(param string, sb *sqlBuilder) error {
 	return nil
 }
@@ -266,6 +290,7 @@ type FilterFunc func(param string, sb *sqlBuilder) error
 
 func eqFilterGenerator(name string) FilterFunc {
 	return func(param string, sb *sqlBuilder) error {
+		sb.addSelect(name)
 		sb.addWhere(fmt.Sprintf("%s = \"%s\"", name, param))
 		return nil
 	}
@@ -274,6 +299,7 @@ func eqFilterGenerator(name string) FilterFunc {
 func nullFilterGenerator(name string) FilterFunc {
 	return func(param string, sb *sqlBuilder) error {
 		if param == "0" {
+			sb.addSelect(name)
 			sb.addWhere(fmt.Sprintf("%s IS NOT NULL", name))
 		} else if param == "1" {
 			sb.addWhere(fmt.Sprintf("%s IS NULL", name))
@@ -317,7 +343,9 @@ var usualFilters = map[string]FilterFunc{
 }
 
 func accountsFilter(queryParams url.Values) (sb sqlBuilder, err error) {
-	sb = sqlBuilder{bytes.Buffer{}, -1}
+	sb = sqlBuilder{map[string]struct{}{}, bytes.Buffer{}, -1}
+	sb.addSelect("id")
+	sb.addSelect("email")
 
 	for field, param := range queryParams {
 		fun, found := usualFilters[field]
@@ -341,13 +369,6 @@ func accountsFilter(queryParams url.Values) (sb sqlBuilder, err error) {
 	return
 }
 
-type AccountsFilterAccount struct {
-	Accounts []struct {
-		Email string `json:"email"`
-		ID    int    `json:"id"`
-	} `json:"accounts"`
-}
-
 type FilterError struct {
 	httpStatusCode int
 	Err            error
@@ -357,28 +378,35 @@ func (e *FilterError) Error() string {
 	return "status: " + strconv.Itoa(e.httpStatusCode) + ", error: " + e.Err.Error()
 }
 
-func accountsFilterCore(queryParams url.Values) (*AccountsFilterAccount, *FilterError) {
+func accountsFilterCore(queryParams url.Values) (*common.AccountContainer, *FilterError) {
 	sb, err := accountsFilter(queryParams)
 	if err != nil {
 		log.Print(err)
-		return &AccountsFilterAccount{}, &FilterError{http.StatusBadRequest, err}
-	}
-	whereCluster := ""
-	if sb.where.Len() != 0 {
-		whereCluster = "WHERE " + sb.where.String()
+		return nil, &FilterError{http.StatusBadRequest, err}
 	}
 
-	query := fmt.Sprintf("SELECT id, email FROM accounts %s ORDER BY id DESC LIMIT %d", whereCluster, sb.limit)
+	selectCluster := bytes.Buffer{}
+	for k, _ := range sb.selects {
+		if selectCluster.Len() != 0 {
+			selectCluster.WriteString(", ")
+		}
+		selectCluster.WriteString(k)
+	}
+
+	whereCluster := ""
+	if sb.wheres.Len() != 0 {
+		whereCluster = "WHERE " + sb.wheres.String()
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM accounts %s ORDER BY id DESC LIMIT %d", selectCluster.String(), whereCluster, sb.limit)
 	log.Printf("query := %s", query)
 
-	afas := AccountsFilterAccount{Accounts: []struct {
-		Email string `json:"email"`
-		ID    int    `json:"id"`
-	}{}}
+	var afas common.AccountContainer
 	if err := db.Select(&afas.Accounts, query); err != nil {
 		log.Print(err)
-		return &AccountsFilterAccount{}, &FilterError{http.StatusInternalServerError, err}
+		return nil, &FilterError{http.StatusInternalServerError, err}
 	}
+
 	return &afas, nil
 }
 
@@ -388,7 +416,7 @@ func accountsFilterHandler(c echo.Context) error {
 		return c.String(err.httpStatusCode, "")
 	}
 
-	return c.JSON(http.StatusOK, afas)
+	return c.JSON(http.StatusOK, afas.ToRawAccountsContainer())
 }
 
 func accountsGroupHandler(c echo.Context) error {
@@ -452,7 +480,7 @@ func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json str
 
 func testAccountsFilter(c echo.Context) error {
 	loadAnsw(`/accounts/filter/`, func(url *url.URL, status int, j string) {
-		ansAfa := AccountsFilterAccount{}
+		ansAfa := common.RawAccountsContainer{}
 		if status == 200 {
 			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
 				log.Fatal(err)
@@ -471,18 +499,16 @@ func testAccountsFilter(c echo.Context) error {
 			log.Fatal(url, err)
 		}
 
-		mp := map[int]string{}
-		for _, a := range afa.Accounts {
-			mp[a.ID] = a.Email
+		if len(ansAfa.Accounts) != len(afa.Accounts) {
+			log.Fatal("length mismatch")
 		}
-		idsStr := []string{}
-		for _, a := range ansAfa.Accounts {
-			idsStr = append(idsStr, strconv.Itoa(a.ID))
-			if mp[a.ID] != a.Email {
-				log.Printf("id = %d not found", a.ID)
+
+		for i := 0; i < len(ansAfa.Accounts); i++ {
+			r := afa.Accounts[i].ToRawAccount()
+			if !ansAfa.Accounts[i].Equal(&r) {
+				log.Fatal("item mismatch")
 			}
 		}
-		log.Print(strings.Join(idsStr, ","))
 	})
 
 	return c.HTML(http.StatusOK, "tested")
@@ -509,31 +535,6 @@ func httpMain() {
 
 	e.GET("/tests/filter", testAccountsFilter)
 	e.Start(":" + port)
-}
-
-type RawAccountsContainer struct {
-	Accounts []struct {
-		ID        int      `json:"id"`
-		Fname     string   `json:"fname"`
-		Sname     string   `json:"sname"`
-		Email     string   `json:"email"`
-		Interests []string `json:"interests"`
-		Status    string   `json:"status"`
-		Premium   struct {
-			Start  int `json:"start"`
-			Finish int `json:"finish"`
-		} `json:"premium"`
-		Sex   string `json:"sex"`
-		Phone string `json:"phone"`
-		Likes []struct {
-			Ts int `json:"ts"`
-			ID int `json:"id"`
-		} `json:"likes"`
-		Birth   int    `json:"birth"`
-		City    string `json:"city"`
-		Country string `json:"country"`
-		Joined  int    `json:"joined"`
-	} `json:"accounts"`
 }
 
 func loadDataInFile(tableName string, fields string, data []byte) {
@@ -571,40 +572,21 @@ func mysqlDataLoader() {
 			log.Fatal(err)
 		}
 
-		var ac RawAccountsContainer
+		var ac common.RawAccountsContainer
 		if err := json.Unmarshal(b, &ac); err != nil {
 			log.Fatal(err)
 		}
 
-		accounts := make([]common.Account, 0)
-		interests := make([]common.Interest, 0)
-		likes := make([]common.Like, 0)
-
+		var accounts []common.Account
+		var interests []common.Interest
+		var likes []common.Like
 		for _, rawAccount := range ac.Accounts {
-			var a common.Account
-			a.ID = rawAccount.ID
-			a.Fname = rawAccount.Fname
-			a.Sname = rawAccount.Sname
-			a.Email = rawAccount.Email
-			a.Status = common.StatusFromString(rawAccount.Status)
-			a.Premium_start = rawAccount.Premium.Start
-			a.Premium_end = rawAccount.Premium.Finish
-			a.Sex = common.SexFromString(rawAccount.Sex)
-			a.Phone = rawAccount.Phone
-			a.Birth = rawAccount.Birth
-			a.City = rawAccount.City
-			a.Country = rawAccount.Country
-			a.Joined = rawAccount.Joined
-			accounts = append(accounts, a)
-
-			for _, i := range rawAccount.Interests {
-				interest := common.Interest{a.ID, i}
-				interests = append(interests, interest)
+			accounts = append(accounts, rawAccount.ToAccount())
+			for _, i := range rawAccount.ToInterests() {
+				interests = append(interests, i)
 			}
-
-			for _, l := range rawAccount.Likes {
-				like := common.Like{a.ID, l.ID, l.Ts}
-				likes = append(likes, like)
+			for _, l := range rawAccount.ToLikes() {
+				likes = append(likes, l)
 			}
 		}
 
