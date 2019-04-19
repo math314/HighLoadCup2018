@@ -76,8 +76,9 @@ func SliceIndex(s []string, val string) int {
 	return -1
 }
 
-var STATUSES = []string{"свободны", "заняты", "всё сложно"}
-var SEXES = []string{"m", "f"}
+// these values are sorted
+var STATUSES = []string{"всё сложно", "заняты", "свободны"}
+var SEXES = []string{"f", "m"}
 
 func StatusFromString(s string) int8 {
 	return int8(SliceIndex(STATUSES, s) + 1)

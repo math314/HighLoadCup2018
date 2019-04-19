@@ -474,11 +474,13 @@ func keysGroupParser(param string, agp *AccountGroupParam) error {
 		}
 		agp.keys[k] = struct{}{}
 
-		from := "accounts"
 		if k == "interests" {
-			from = "interests"
+			agp.addFrom("accounts")
+			agp.addFrom("interests")
+			agp.addWhere("a.id = i.account_id")
+		} else {
+			agp.addFrom("accounts")
 		}
-		agp.addFrom(from)
 	}
 	return nil
 }
@@ -584,6 +586,7 @@ type RawGroupResponse struct {
 	Status    string `json:"status,omitempty"`
 	Interests string `json:"interests,omitempty"`
 	Country   string `json:"country,omitempty"`
+	City      string `json:"city,omitempty"`
 	Count     int    `json:"count,omitempty"`
 }
 
@@ -596,6 +599,7 @@ type GroupResponse struct {
 	Status    int    `db:"status"`
 	Interests string `db:"interests"`
 	Country   string `db:"country"`
+	City      string `db:"city"`
 	Count     int    `db:"count"`
 }
 
@@ -609,6 +613,7 @@ func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
 	}
 	r.Interests = gr.Interests
 	r.Country = gr.Country
+	r.City = gr.City
 	r.Count = gr.Count
 	return &r
 }
@@ -624,6 +629,9 @@ func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
 		return false
 	}
 	if l.Country != r.Country {
+		return false
+	}
+	if l.City != r.City {
 		return false
 	}
 	if l.Count != r.Count {
@@ -678,6 +686,8 @@ func accountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) 
 		selectCluster.WriteString(", ")
 		if k == "interests" {
 			selectCluster.WriteString("i.interest AS interests")
+		} else if k == "country" || k == "city" {
+			selectCluster.WriteString("IFNULL(a." + k + ", \"\") AS " + k)
 		} else {
 			selectCluster.WriteString("a." + k + " AS " + k)
 		}
@@ -688,8 +698,14 @@ func accountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) 
 		if fromCluster.Len() != 0 {
 			fromCluster.WriteString(", ")
 		}
+
 		fromCluster.WriteString(k + " AS ")
 		fromCluster.WriteByte(k[0])
+	}
+
+	whereClusterWithWHERE := ""
+	if agp.wheres.Len() != 0 {
+		whereClusterWithWHERE = "WHERE " + agp.wheres.String()
 	}
 
 	groupByCluster := bytes.Buffer{}
@@ -701,15 +717,22 @@ func accountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) 
 	}
 
 	orderByCluster := bytes.Buffer{}
-	orderByCluster.WriteString("`count` ")
-	if agp.order == 1 {
-		orderByCluster.WriteString("ASC")
-	} else {
-		orderByCluster.WriteString("DESC")
+	{
+		order := "ASC"
+		if agp.order == -1 {
+			order = "DESC"
+		}
+		orderByCluster.WriteString("`count` " + order)
+		for _, v := range []string{"country", "city", "interests", "sex", "status"} {
+			if _, ok := agp.keys[v]; !ok {
+				continue
+			}
+			orderByCluster.WriteString(", " + v + " " + order)
+		}
 	}
 
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s GROUP BY %s ORDER BY %s LIMIT %d",
-		selectCluster.String(), fromCluster.String(), agp.wheres.String(), groupByCluster.String(),
+	query := fmt.Sprintf("SELECT %s FROM %s /*WHERE*/%s GROUP BY %s ORDER BY %s LIMIT %d",
+		selectCluster.String(), fromCluster.String(), whereClusterWithWHERE, groupByCluster.String(),
 		orderByCluster.String(), agp.limit)
 	log.Printf("query := %s", query)
 
@@ -757,7 +780,7 @@ func accountsLikesHandler(c echo.Context) error {
 }
 
 func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json string)) {
-	fp, err := os.Open("./testdata/answers/phase_3_get.answ")
+	fp, err := os.Open("./testdata/answers/phase_1_get.answ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -819,7 +842,7 @@ func testAccountsFilter(c echo.Context) error {
 		for i := 0; i < len(ansAfa.Accounts); i++ {
 			r := afa.Accounts[i].ToRawAccount()
 			if !ansAfa.Accounts[i].Equal(&r) {
-				log.Print("item mismatch")
+				log.Fatal("item mismatch")
 			}
 		}
 	})
@@ -828,7 +851,7 @@ func testAccountsFilter(c echo.Context) error {
 }
 
 func testAccountsGroup(c echo.Context) error {
-	loadAnsw(`/accounts/group/`, func(url *url.URL, status int, j string) {
+	loadAnsw(`/accounts/group/$`, func(url *url.URL, status int, j string) {
 		ansGr := RawGroupResponses{}
 		if status == 200 {
 			if err := json.Unmarshal([]byte(j), &ansGr); err != nil {
@@ -836,12 +859,17 @@ func testAccountsGroup(c echo.Context) error {
 			}
 		}
 
-		gr, err := accountsGroupCore(url.Query())
+		_gr, err := accountsGroupCore(url.Query())
 		if status != 200 {
 			if err == nil || status != err.httpStatusCode {
 				log.Fatal(url, "status mismatch")
 			}
 			return
+		}
+
+		gr := []*RawGroupResponse{}
+		for _, v := range _gr {
+			gr = append(gr, v.ToRawGroupResponse())
 		}
 
 		if err != nil {
@@ -853,9 +881,8 @@ func testAccountsGroup(c echo.Context) error {
 		}
 
 		for i := 0; i < len(ansGr.Groups); i++ {
-			r := gr[i].ToRawGroupResponse()
-			if !ansGr.Groups[i].Equal(r) {
-				log.Print("item mismatch")
+			if !ansGr.Groups[i].Equal(gr[i]) {
+				log.Printf("item mismatch : index = %d", i)
 			}
 		}
 	})
