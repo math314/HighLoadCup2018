@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -582,12 +583,12 @@ var accountGroupFuncs = map[string]AccountGroupFunc{
 }
 
 type RawGroupResponse struct {
-	Sex       string `json:"sex,omitempty"`
-	Status    string `json:"status,omitempty"`
-	Interests string `json:"interests,omitempty"`
-	Country   string `json:"country,omitempty"`
-	City      string `json:"city,omitempty"`
-	Count     int    `json:"count,omitempty"`
+	Sex       string  `json:"sex,omitempty"`
+	Status    string  `json:"status,omitempty"`
+	Interests string  `json:"interests,omitempty"`
+	Country   *string `json:"country,omitempty"`
+	City      *string `json:"city,omitempty"`
+	Count     int     `json:"count,omitempty"`
 }
 
 type RawGroupResponses struct {
@@ -595,12 +596,12 @@ type RawGroupResponses struct {
 }
 
 type GroupResponse struct {
-	Sex       int    `db:"sex"`
-	Status    int    `db:"status"`
-	Interests string `db:"interests"`
-	Country   string `db:"country"`
-	City      string `db:"city"`
-	Count     int    `db:"count"`
+	Sex       int            `db:"sex"`
+	Status    int            `db:"status"`
+	Interests string         `db:"interests"`
+	Country   sql.NullString `db:"country"`
+	City      sql.NullString `db:"city"`
+	Count     int            `db:"count"`
 }
 
 func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
@@ -612,8 +613,12 @@ func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
 		r.Status = common.STATUSES[gr.Status-1]
 	}
 	r.Interests = gr.Interests
-	r.Country = gr.Country
-	r.City = gr.City
+	if gr.Country.Valid {
+		r.Country = &gr.Country.String
+	}
+	if gr.City.Valid {
+		r.City = &gr.City.String
+	}
 	r.Count = gr.Count
 	return &r
 }
@@ -628,10 +633,10 @@ func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
 	if l.Interests != r.Interests {
 		return false
 	}
-	if l.Country != r.Country {
+	if *l.Country != *r.Country {
 		return false
 	}
-	if l.City != r.City {
+	if *l.City != *r.City {
 		return false
 	}
 	if l.Count != r.Count {
