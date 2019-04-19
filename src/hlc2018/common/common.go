@@ -33,7 +33,7 @@ type RawAccount struct {
 }
 
 type RawAccountsContainer struct {
-	Accounts []RawAccount `json:"accounts"`
+	Accounts []*RawAccount `json:"accounts"`
 }
 
 type Account struct {
@@ -177,7 +177,7 @@ func (l *RawAccount) Equal(r *RawAccount) bool {
 	return true
 }
 
-func (a *Account) ToRawAccount() RawAccount {
+func (a *Account) ToRawAccount() *RawAccount {
 	r := RawAccount{}
 	r.ID = a.ID
 	r.Fname = a.Fname
@@ -200,11 +200,11 @@ func (a *Account) ToRawAccount() RawAccount {
 	r.Country = a.Country
 	r.Joined = a.Joined
 
-	return r
+	return &r
 }
 
 func (ac *AccountContainer) ToRawAccountsContainer() RawAccountsContainer {
-	rac := RawAccountsContainer{[]RawAccount{}}
+	rac := RawAccountsContainer{[]*RawAccount{}}
 	for _, a := range ac.Accounts {
 		rac.Accounts = append(rac.Accounts, a.ToRawAccount())
 	}

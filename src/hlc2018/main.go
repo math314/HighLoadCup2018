@@ -840,7 +840,7 @@ func testAccountsFilter(c echo.Context) error {
 
 		for i := 0; i < len(ansAfa.Accounts); i++ {
 			r := afa.Accounts[i].ToRawAccount()
-			if !ansAfa.Accounts[i].Equal(&r) {
+			if !ansAfa.Accounts[i].Equal(r) {
 				log.Fatal("item mismatch")
 			}
 		}
@@ -896,9 +896,11 @@ func httpMain() {
 	}
 
 	e := echo.New()
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: "request:\"${method} ${uri}\" status:${status} latency:${latency} (${latency_human}) bytes:${bytes_out}\n",
-	}))
+	if port != "8080" {
+		e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+			Format: "request:\"${method} ${uri}\" status:${status} latency:${latency} (${latency_human}) bytes:${bytes_out}\n",
+		}))
+	}
 
 	e.GET("/accounts/filter/", accountsFilterHandler)
 	e.GET("/accounts/group/", accountsGroupHandler)
