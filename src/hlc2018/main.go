@@ -614,10 +614,12 @@ func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
 	}
 	r.Interests = gr.Interests
 	if gr.Country.Valid {
-		r.Country = &gr.Country.String
+		tmp := gr.Country.String
+		r.Country = &tmp
 	}
 	if gr.City.Valid {
-		r.City = &gr.City.String
+		tmp := gr.City.String
+		r.City = &tmp
 	}
 	r.Count = gr.Count
 	return &r
