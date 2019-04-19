@@ -310,7 +310,7 @@ func nullFilterGenerator(name string) FilterFunc {
 	}
 }
 
-var usualFilters = map[string]FilterFunc{
+var filterFuncs = map[string]FilterFunc{
 	"sex_eq":             SexEqFilter,
 	"email_domain":       emailDomainFilter,
 	"email_lt":           emailLtFilter,
@@ -348,7 +348,7 @@ func accountsFilter(queryParams url.Values) (sb sqlBuilder, err error) {
 	sb.addSelect("email")
 
 	for field, param := range queryParams {
-		fun, found := usualFilters[field]
+		fun, found := filterFuncs[field]
 		if !found {
 			err = fmt.Errorf("filter (%s) not found", field)
 			return
@@ -369,20 +369,20 @@ func accountsFilter(queryParams url.Values) (sb sqlBuilder, err error) {
 	return
 }
 
-type FilterError struct {
+type HlcHttpError struct {
 	httpStatusCode int
 	Err            error
 }
 
-func (e *FilterError) Error() string {
+func (e *HlcHttpError) Error() string {
 	return "status: " + strconv.Itoa(e.httpStatusCode) + ", error: " + e.Err.Error()
 }
 
-func accountsFilterCore(queryParams url.Values) (*common.AccountContainer, *FilterError) {
+func accountsFilterCore(queryParams url.Values) (*common.AccountContainer, *HlcHttpError) {
 	sb, err := accountsFilter(queryParams)
 	if err != nil {
 		log.Print(err)
-		return nil, &FilterError{http.StatusBadRequest, err}
+		return nil, &HlcHttpError{http.StatusBadRequest, err}
 	}
 
 	selectCluster := bytes.Buffer{}
@@ -404,7 +404,7 @@ func accountsFilterCore(queryParams url.Values) (*common.AccountContainer, *Filt
 	var afas common.AccountContainer
 	if err := db.Select(&afas.Accounts, query); err != nil {
 		log.Print(err)
-		return nil, &FilterError{http.StatusInternalServerError, err}
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
 	}
 
 	return &afas, nil
@@ -419,8 +419,321 @@ func accountsFilterHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, afas.ToRawAccountsContainer())
 }
 
-func accountsGroupHandler(c echo.Context) error {
+type AccountGroupParam struct {
+	keys   map[string]struct{}
+	froms  map[string]struct{}
+	wheres bytes.Buffer
+	limit  int
+	order  int
+}
+
+func (agp *AccountGroupParam) addFrom(s string) {
+	agp.froms[s] = struct{}{}
+}
+
+func (agp *AccountGroupParam) addWhere(s string) {
+	if agp.wheres.Len() != 0 {
+		agp.wheres.WriteString(" AND ")
+	}
+	agp.wheres.WriteString(s)
+}
+
+type AccountGroupFunc func(param string, agp *AccountGroupParam) error
+
+func sexGroupParser(param string, agp *AccountGroupParam) error {
+	sex := common.SexFromString(param)
+	if sex == 0 {
+		return fmt.Errorf("%s is not valid sex", param)
+	}
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("a.sex = %d", sex))
 	return nil
+}
+
+func likesGroupParser(param string, agp *AccountGroupParam) error {
+	like, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse like (%s)", param)
+	}
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("a.id in (SELECT account_id_from FROM likes WHERE account_id_to = %d)", like))
+	return nil
+}
+
+func countryGroupParser(param string, agp *AccountGroupParam) error {
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("a.country = \"%s\"", param))
+	return nil
+}
+
+func keysGroupParser(param string, agp *AccountGroupParam) error {
+	validKeys := []string{"sex", "status", "interests", "country", "city"}
+	for _, k := range strings.Split(param, ",") {
+		if common.SliceIndex(validKeys, k) == -1 {
+			return fmt.Errorf("invalid keys (%s)", k)
+		}
+		agp.keys[k] = struct{}{}
+
+		from := "accounts"
+		if k == "interests" {
+			from = "interests"
+		}
+		agp.addFrom(from)
+	}
+	return nil
+}
+
+func joinedGroupParser(param string, agp *AccountGroupParam) error {
+	joined, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse joined (%s)", param)
+	}
+
+	from := time.Date(joined, 1, 1, 0, 0, 0, 0, time.UTC)
+	after := time.Date(joined+1, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("a.joined >= %d", from.Unix()))
+	agp.addWhere(fmt.Sprintf("a.joined < %d", after.Unix()))
+
+	return nil
+}
+
+func statusGroupParser(param string, agp *AccountGroupParam) error {
+	status := common.StatusFromString(param)
+	if status == 0 {
+		return fmt.Errorf("%s is not valid status", param)
+	}
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("a.status = %d", status))
+	return nil
+}
+
+func orderGroupParser(param string, agp *AccountGroupParam) error {
+	order, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse order (%s)", param)
+	}
+	if order != 1 && order != -1 {
+		return fmt.Errorf("invalid order (%d)", order)
+	}
+	agp.order = order
+	return nil
+}
+
+func limitGroupParser(param string, agp *AccountGroupParam) error {
+	limit, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse limit (%s)", param)
+	}
+	agp.limit = limit
+	return nil
+}
+
+func interestsGroupParser(param string, agp *AccountGroupParam) error {
+	agp.addFrom("accounts")
+	agp.addFrom("interests")
+	agp.addWhere("a.id = i.account_id")
+	agp.addWhere(fmt.Sprintf("interest = \"%s\"", param))
+	return nil
+}
+
+func birthGroupParser(param string, agp *AccountGroupParam) error {
+	birth, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse birth (%s)", param)
+	}
+
+	from := time.Date(birth, 1, 1, 0, 0, 0, 0, time.UTC)
+	after := time.Date(birth+1, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("birth >= %d", from.Unix()))
+	agp.addWhere(fmt.Sprintf("birth < %d", after.Unix()))
+
+	return nil
+}
+
+func cityGroupParser(param string, agp *AccountGroupParam) error {
+	agp.addFrom("accounts")
+	agp.addWhere(fmt.Sprintf("city = \"%s\"", param))
+	return nil
+}
+
+func noopGroupParser(param string, agp *AccountGroupParam) error {
+	return nil
+}
+
+var accountGroupFuncs = map[string]AccountGroupFunc{
+	"sex":       sexGroupParser,
+	"likes":     likesGroupParser,
+	"country":   countryGroupParser,
+	"keys":      keysGroupParser,
+	"joined":    joinedGroupParser,
+	"query_id":  noopGroupParser,
+	"status":    statusGroupParser,
+	"order":     orderGroupParser,
+	"limit":     limitGroupParser,
+	"interests": interestsGroupParser,
+	"birth":     birthGroupParser,
+	"city":      cityGroupParser,
+}
+
+type RawGroupResponse struct {
+	Sex       string `json:"sex,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Interests string `json:"interests,omitempty"`
+	Country   string `json:"country,omitempty"`
+	Count     int    `json:"count,omitempty"`
+}
+
+type RawGroupResponses struct {
+	Groups []*RawGroupResponse `json:"groups"`
+}
+
+type GroupResponse struct {
+	Sex       int    `db:"sex"`
+	Status    int    `db:"status"`
+	Interests string `db:"interests"`
+	Country   string `db:"country"`
+	Count     int    `db:"count"`
+}
+
+func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
+	r := RawGroupResponse{}
+	if gr.Sex != 0 {
+		r.Sex = common.SEXES[gr.Sex-1]
+	}
+	if gr.Status != 0 {
+		r.Status = common.STATUSES[gr.Status-1]
+	}
+	r.Interests = gr.Interests
+	r.Country = gr.Country
+	r.Count = gr.Count
+	return &r
+}
+
+func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
+	if l.Sex != r.Sex {
+		return false
+	}
+	if l.Status != r.Status {
+		return false
+	}
+	if l.Interests != r.Interests {
+		return false
+	}
+	if l.Country != r.Country {
+		return false
+	}
+	if l.Count != r.Count {
+		return false
+	}
+	return true
+}
+
+func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err error) {
+	agp = &AccountGroupParam{map[string]struct{}{}, map[string]struct{}{}, bytes.Buffer{}, -1, 0}
+
+	for field, param := range queryParams {
+		fun, found := accountGroupFuncs[field]
+		if !found {
+			err = fmt.Errorf("filter (%s) not found", field)
+			return
+		}
+		if len(param) != 1 {
+			err = fmt.Errorf("multiple params in filter (%s)", field)
+			return
+		}
+		if err = fun(param[0], agp); err != nil {
+			return
+		}
+	}
+	if agp.limit == -1 {
+		err = fmt.Errorf("limit is not specified")
+		return
+	}
+	if agp.order == 0 {
+		err = fmt.Errorf("order is not specified")
+		return
+	}
+	if len(agp.keys) == 0 {
+		err = fmt.Errorf("keys is not specified")
+		return
+	}
+
+	return
+}
+
+func accountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) {
+	agp, err := accountsGroupParser(queryParams)
+	if err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusBadRequest, err}
+	}
+
+	selectCluster := bytes.Buffer{}
+	selectCluster.WriteString("COUNT(*) AS `count`")
+	for k, _ := range agp.keys {
+		selectCluster.WriteString(", ")
+		if k == "interests" {
+			selectCluster.WriteString("i.interest AS interests")
+		} else {
+			selectCluster.WriteString("a." + k + " AS " + k)
+		}
+	}
+
+	fromCluster := bytes.Buffer{}
+	for k, _ := range agp.froms {
+		if fromCluster.Len() != 0 {
+			fromCluster.WriteString(", ")
+		}
+		fromCluster.WriteString(k + " AS ")
+		fromCluster.WriteByte(k[0])
+	}
+
+	groupByCluster := bytes.Buffer{}
+	for k, _ := range agp.keys {
+		if groupByCluster.Len() != 0 {
+			groupByCluster.WriteString(", ")
+		}
+		groupByCluster.WriteString(k)
+	}
+
+	orderByCluster := bytes.Buffer{}
+	orderByCluster.WriteString("`count` ")
+	if agp.order == 1 {
+		orderByCluster.WriteString("ASC")
+	} else {
+		orderByCluster.WriteString("DESC")
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s GROUP BY %s ORDER BY %s LIMIT %d",
+		selectCluster.String(), fromCluster.String(), agp.wheres.String(), groupByCluster.String(),
+		orderByCluster.String(), agp.limit)
+	log.Printf("query := %s", query)
+
+	var grs []GroupResponse
+	if err := db.Select(&grs, query); err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+
+	return grs, nil
+}
+
+func accountsGroupHandler(c echo.Context) error {
+	grs, err := accountsGroupCore(c.QueryParams())
+	if err != nil {
+		return c.String(err.httpStatusCode, "")
+	}
+
+	rgr := RawGroupResponses{[]*RawGroupResponse{}}
+	for _, g := range grs {
+		rgr.Groups = append(rgr.Groups, g.ToRawGroupResponse())
+	}
+
+	return c.JSON(http.StatusOK, &rgr)
 }
 
 func accountsRecommendHandler(c echo.Context) error {
@@ -444,7 +757,7 @@ func accountsLikesHandler(c echo.Context) error {
 }
 
 func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json string)) {
-	fp, err := os.Open("./testdata/answers/phase_1_get.answ")
+	fp, err := os.Open("./testdata/answers/phase_3_get.answ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -506,7 +819,43 @@ func testAccountsFilter(c echo.Context) error {
 		for i := 0; i < len(ansAfa.Accounts); i++ {
 			r := afa.Accounts[i].ToRawAccount()
 			if !ansAfa.Accounts[i].Equal(&r) {
-				log.Fatal("item mismatch")
+				log.Print("item mismatch")
+			}
+		}
+	})
+
+	return c.HTML(http.StatusOK, "tested")
+}
+
+func testAccountsGroup(c echo.Context) error {
+	loadAnsw(`/accounts/group/`, func(url *url.URL, status int, j string) {
+		ansGr := RawGroupResponses{}
+		if status == 200 {
+			if err := json.Unmarshal([]byte(j), &ansGr); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		gr, err := accountsGroupCore(url.Query())
+		if status != 200 {
+			if err == nil || status != err.httpStatusCode {
+				log.Fatal(url, "status mismatch")
+			}
+			return
+		}
+
+		if err != nil {
+			log.Fatal(url, err)
+		}
+
+		if len(ansGr.Groups) != len(gr) {
+			log.Fatal("length mismatch")
+		}
+
+		for i := 0; i < len(ansGr.Groups); i++ {
+			r := gr[i].ToRawGroupResponse()
+			if !ansGr.Groups[i].Equal(r) {
+				log.Print("item mismatch")
 			}
 		}
 	})
@@ -533,7 +882,8 @@ func httpMain() {
 	e.POST("/accounts/:id/", accountsIdHandler)
 	e.POST("/accounts/likes/", accountsLikesHandler)
 
-	e.GET("/tests/filter", testAccountsFilter)
+	e.GET("/tests/filter/", testAccountsFilter)
+	e.GET("/tests/group/", testAccountsGroup)
 	e.Start(":" + port)
 }
 

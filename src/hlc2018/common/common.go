@@ -67,7 +67,7 @@ type Like struct {
 	Ts            int
 }
 
-func sliceIndex(s []string, val string) int {
+func SliceIndex(s []string, val string) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] == val {
 			return i
@@ -80,11 +80,11 @@ var STATUSES = []string{"свободны", "заняты", "всё сложно
 var SEXES = []string{"m", "f"}
 
 func StatusFromString(s string) int8 {
-	return int8(sliceIndex(STATUSES, s) + 1)
+	return int8(SliceIndex(STATUSES, s) + 1)
 }
 
 func SexFromString(s string) int8 {
-	return int8(sliceIndex(SEXES, s) + 1)
+	return int8(SliceIndex(SEXES, s) + 1)
 }
 
 func (rawAccount *RawAccount) ToAccount() Account {
