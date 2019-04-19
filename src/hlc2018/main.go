@@ -583,12 +583,12 @@ var accountGroupFuncs = map[string]AccountGroupFunc{
 }
 
 type RawGroupResponse struct {
-	Sex       string  `json:"sex,omitempty"`
-	Status    string  `json:"status,omitempty"`
-	Interests string  `json:"interests,omitempty"`
-	Country   *string `json:"country,omitempty"`
-	City      *string `json:"city,omitempty"`
-	Count     int     `json:"count,omitempty"`
+	Sex       string `json:"sex,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Interests string `json:"interests,omitempty"`
+	Country   string `json:"country,omitempty"`
+	City      string `json:"city,omitempty"`
+	Count     int    `json:"count,omitempty"`
 }
 
 type RawGroupResponses struct {
@@ -613,14 +613,8 @@ func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
 		r.Status = common.STATUSES[gr.Status-1]
 	}
 	r.Interests = gr.Interests
-	if gr.Country.Valid {
-		tmp := gr.Country.String
-		r.Country = &tmp
-	}
-	if gr.City.Valid {
-		tmp := gr.City.String
-		r.City = &tmp
-	}
+	r.Country = gr.Country.String
+	r.City = gr.City.String
 	r.Count = gr.Count
 	return &r
 }
@@ -635,10 +629,10 @@ func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
 	if l.Interests != r.Interests {
 		return false
 	}
-	if *l.Country != *r.Country {
+	if l.Country != r.Country {
 		return false
 	}
-	if *l.City != *r.City {
+	if l.City != r.City {
 		return false
 	}
 	if l.Count != r.Count {
@@ -693,8 +687,6 @@ func accountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) 
 		selectCluster.WriteString(", ")
 		if k == "interests" {
 			selectCluster.WriteString("i.interest AS interests")
-		} else if k == "country" || k == "city" {
-			selectCluster.WriteString("IFNULL(a." + k + ", \"\") AS " + k)
 		} else {
 			selectCluster.WriteString("a." + k + " AS " + k)
 		}
