@@ -212,8 +212,8 @@ func birthYearFilter(param string, sb *sqlBuilder) error {
 
 func premiumNowFilter(param string, sb *sqlBuilder) error {
 	//y, m, d := time.Now().In(time.UTC).Date()
-	from := time.Date(2019, 1, 24, 0, 0, 0, 0, time.UTC)
-	after := time.Date(2019, 1, 25, 0, 0, 0, 0, time.UTC)
+	from := time.Date(2019, 1, 24, 1, 0, 0, 0, time.UTC)
+	after := time.Date(2019, 1, 24, 2, 0, 0, 0, time.UTC)
 
 	sb.addSelect("premium_start")
 	sb.addSelect("premium_end")
