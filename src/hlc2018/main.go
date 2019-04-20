@@ -417,7 +417,7 @@ func accountsFilterHandler(c echo.Context) error {
 		return c.String(err.httpStatusCode, "")
 	}
 
-	return c.JSON(http.StatusOK, afas.ToRawAccountsContainer())
+	return common.JsonResponseWithoutChunking(c, http.StatusOK, afas.ToRawAccountsContainer())
 }
 
 type AccountGroupParam struct {
@@ -755,7 +755,7 @@ func accountsGroupHandler(c echo.Context) error {
 		rgr.Groups = append(rgr.Groups, g.ToRawGroupResponse())
 	}
 
-	return c.JSON(http.StatusOK, &rgr)
+	return common.JsonResponseWithoutChunking(c, http.StatusOK, &rgr)
 }
 
 func accountsRecommendHandler(c echo.Context) error {
@@ -766,12 +766,127 @@ func accountsSuggestHandler(c echo.Context) error {
 	return nil
 }
 
+func InsertAccount(tx *sql.Tx, account *common.Account) error {
+	args := account.InsertArgs()
+	var placeHolders []string
+	for i := 0; i < len(args); i++ {
+		placeHolders = append(placeHolders, "?")
+	}
+	if _, err := tx.Exec(fmt.Sprintf("INSERT INTO accounts VALUES(%s)", strings.Join(placeHolders, ",")), args); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func InsertInterests(tx *sql.Tx, interests []*common.Interest) error {
+	for _, v := range interests {
+		if _, err := tx.Exec("INSERT INTO interests(account_id, interest) VALUES(?,?)", v.AccountId, v.Interest); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteInterests(tx *sql.Tx, accountId int) error {
+	_, err := tx.Exec("DELETE FROM interests WHERE account_id = ?", accountId)
+	return err
+}
+
+func InsertLikes(tx *sql.Tx, likes []*common.Like) error {
+	for _, v := range likes {
+		if _, err := tx.Exec("INSERT INTO likes(account_id_from, account_id_to, ts) VALUES(?,?,?)", v.AccountIdFrom, v.AccountIdTo, v.Ts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteLikes(tx *sql.Tx, accountId int) error {
+	_, err := tx.Exec("DELETE FROM likes WHERE account_id_from = ?", accountId)
+	return err
+}
+
+func accountsNewHandlerCore(rc *common.RawAccount) *HlcHttpError {
+	tx, err := db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = func() error {
+		if err := InsertAccount(tx, rc.ToAccount()); err != nil {
+			return err
+		}
+		if err := InsertInterests(tx, rc.ToInterests()); err != nil {
+			return err
+		}
+		if err := InsertLikes(tx, rc.ToLikes()); err != nil {
+			return err
+		}
+		return nil
+	}()
+
+	if err != nil {
+		tx.Rollback()
+		return &HlcHttpError{http.StatusBadRequest, err}
+	} else {
+		tx.Commit()
+	}
+
+	return nil
+}
+
 func accountsNewHandler(c echo.Context) error {
+	ra := common.RawAccount{}
+	if err := c.Bind(&ra); err != nil {
+		log.Fatal(err)
+	}
+	if err := accountsNewHandlerCore(&ra); err != nil {
+		return c.HTML(err.httpStatusCode, "")
+	}
+
+	return c.JSON(http.StatusCreated, map[string]interface{}{})
+}
+
+func accountsUpdateHandlerCore(rc *common.RawAccount) *HlcHttpError {
+	tx, err := db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = func() error {
+		if err := InsertAccount(tx, rc.ToAccount()); err != nil {
+			return err
+		}
+		if err := InsertInterests(tx, rc.ToInterests()); err != nil {
+			return err
+		}
+		if err := InsertLikes(tx, rc.ToLikes()); err != nil {
+			return err
+		}
+		return nil
+	}()
+
+	if err != nil {
+		tx.Rollback()
+		return &HlcHttpError{http.StatusBadRequest, err}
+	} else {
+		tx.Commit()
+	}
+
 	return nil
 }
 
 func accountsIdHandler(c echo.Context) error {
-	return nil
+	ra := common.RawAccount{}
+	if err := c.Bind(&ra); err != nil {
+		log.Fatal(err)
+	}
+	if err := accountsUpdateHandlerCore(&ra); err != nil {
+		return c.HTML(err.httpStatusCode, "")
+	}
+
+	return c.JSON(http.StatusCreated, map[string]interface{}{})
 }
 
 func accountsLikesHandler(c echo.Context) error {
@@ -896,7 +1011,7 @@ func httpMain() {
 	}
 
 	e := echo.New()
-	if port != "8080" {
+	if port == "8080" {
 		e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 			Format: "request:\"${method} ${uri}\" status:${status} latency:${latency} (${latency_human}) bytes:${bytes_out}\n",
 		}))
@@ -955,9 +1070,9 @@ func mysqlDataLoader() {
 			log.Fatal(err)
 		}
 
-		var accounts []common.Account
-		var interests []common.Interest
-		var likes []common.Like
+		var accounts []*common.Account
+		var interests []*common.Interest
+		var likes []*common.Like
 		for _, rawAccount := range ac.Accounts {
 			accounts = append(accounts, rawAccount.ToAccount())
 			for _, i := range rawAccount.ToInterests() {

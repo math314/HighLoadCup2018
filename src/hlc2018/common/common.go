@@ -1,7 +1,9 @@
 package common
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/labstack/echo"
 	"log"
 	"strconv"
 	"strings"
@@ -88,7 +90,7 @@ func SexFromString(s string) int8 {
 	return int8(SliceIndex(SEXES, s) + 1)
 }
 
-func (rawAccount *RawAccount) ToAccount() Account {
+func (rawAccount *RawAccount) ToAccount() *Account {
 	var a Account
 	a.ID = rawAccount.ID
 	a.Fname = rawAccount.Fname
@@ -106,24 +108,24 @@ func (rawAccount *RawAccount) ToAccount() Account {
 	a.Country = rawAccount.Country
 	a.Joined = rawAccount.Joined
 
-	return a
+	return &a
 }
 
-func (rawAccount *RawAccount) ToInterests() []Interest {
-	var interests []Interest
+func (rawAccount *RawAccount) ToInterests() []*Interest {
+	var interests []*Interest
 	for _, i := range rawAccount.Interests {
 		interest := Interest{rawAccount.ID, i}
-		interests = append(interests, interest)
+		interests = append(interests, &interest)
 	}
 
 	return interests
 }
 
-func (rawAccount *RawAccount) ToLikes() []Like {
-	var likes []Like
+func (rawAccount *RawAccount) ToLikes() []*Like {
+	var likes []*Like
 	for _, l := range rawAccount.Likes {
 		like := Like{rawAccount.ID, l.ID, l.Ts}
-		likes = append(likes, like)
+		likes = append(likes, &like)
 	}
 
 	return likes
@@ -260,6 +262,23 @@ func (a *Account) Oneline() string {
 	return olb.build()
 }
 
+func (a *Account) InsertArgs() []interface{} {
+	return []interface{}{
+		a.ID,
+		a.Email,
+		a.Fname,
+		a.Sname,
+		int(a.Sex),
+		a.Birth,
+		a.Country,
+		a.City,
+		a.Joined,
+		int(a.Status),
+		a.Premium_start,
+		a.Premium_end,
+	}
+}
+
 func (i *Interest) Oneline() string {
 	olb := oneLineBuilder{strings.Builder{}}
 	olb.appendInt(i.AccountId)
@@ -273,4 +292,24 @@ func (l *Like) Oneline() string {
 	olb.appendInt(l.AccountIdTo)
 	olb.appendInt(l.Ts)
 	return olb.build()
+}
+
+func JsonResponseWithoutChunking(c echo.Context, code int, val interface{}) error {
+	data, err := json.Marshal(val)
+	if err != nil {
+		return err
+	}
+
+	c.Response().Header().Set(echo.HeaderContentLength, strconv.Itoa(len(data)))
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(code)
+	n, err := c.Response().Write(data)
+	if err != nil {
+		return err
+	}
+	if len(data) != n {
+		return fmt.Errorf("wirtten data size is not enough. expected = %d, actual = %d", len(data), n)
+	}
+
+	return nil
 }
