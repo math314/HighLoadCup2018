@@ -212,14 +212,9 @@ func birthYearFilter(param string, sb *sqlBuilder) error {
 }
 
 func premiumNowFilter(param string, sb *sqlBuilder) error {
-	//y, m, d := time.Now().In(time.UTC).Date()
-	from := time.Date(2019, 1, 24, 1, 0, 0, 0, time.UTC)
-	after := time.Date(2019, 1, 24, 2, 0, 0, 0, time.UTC)
-
 	sb.addSelect("premium_start")
 	sb.addSelect("premium_end")
-	sb.addWhere(fmt.Sprintf("premium_start <= %d", from.Unix()))
-	sb.addWhere(fmt.Sprintf("premium_end >= %d", after.Unix()))
+	sb.addWhere("premium_now = 1")
 	return nil
 }
 
@@ -242,6 +237,9 @@ func limitFilter(param string, sb *sqlBuilder) error {
 	limit, err := strconv.Atoi(param)
 	if err != nil {
 		return fmt.Errorf("failed to parse limit (%s)", param)
+	}
+	if limit <= 0 {
+		return fmt.Errorf("limit should be positive (%s)", param)
 	}
 	sb.limit = limit
 	return nil
@@ -349,6 +347,11 @@ func accountsFilter(queryParams url.Values) (sb sqlBuilder, err error) {
 	sb.addSelect("email")
 
 	for field, param := range queryParams {
+		if param[0] == "" {
+			err = fmt.Errorf("parameter cannot be empty (field = %s)", field)
+			return
+		}
+
 		fun, found := filterFuncs[field]
 		if !found {
 			err = fmt.Errorf("filter (%s) not found", field)
@@ -529,6 +532,9 @@ func limitGroupParser(param string, agp *AccountGroupParam) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse limit (%s)", param)
 	}
+	if limit <= 0 {
+		return fmt.Errorf("limit should be positive (%s)", param)
+	}
 	agp.limit = limit
 	return nil
 }
@@ -645,6 +651,10 @@ func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err er
 	agp = &AccountGroupParam{map[string]struct{}{}, map[string]struct{}{}, bytes.Buffer{}, -1, 0}
 
 	for field, param := range queryParams {
+		if param[0] == "" {
+			err = fmt.Errorf("parameter cannot be empty (field = %s)", field)
+			return
+		}
 		fun, found := accountGroupFuncs[field]
 		if !found {
 			err = fmt.Errorf("filter (%s) not found", field)
@@ -758,8 +768,213 @@ func accountsGroupHandler(c echo.Context) error {
 	return common.JsonResponseWithoutChunking(c, http.StatusOK, &rgr)
 }
 
-func accountsRecommendHandler(c echo.Context) error {
+type AccountRecommendParam struct {
+	id     int
+	wheres bytes.Buffer
+	limit  int
+}
+
+func (arp *AccountRecommendParam) addWhere(s string) {
+	if arp.wheres.Len() != 0 {
+		arp.wheres.WriteString(" AND ")
+	}
+	arp.wheres.WriteString(s)
+}
+
+func idRecommendParser(param string, agp *AccountRecommendParam) error {
+	id, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse id (%s)", param)
+	}
+	agp.id = id
 	return nil
+}
+
+func limitRecommendParser(param string, agp *AccountRecommendParam) error {
+	limit, err := strconv.Atoi(param)
+	if err != nil {
+		return fmt.Errorf("failed to parse limit (%s)", param)
+	}
+	if limit <= 0 {
+		return fmt.Errorf("limit should be positive (%s)", param)
+	}
+	agp.limit = limit
+	return nil
+}
+
+func cityRecommendParser(param string, agp *AccountRecommendParam) error {
+	if param == "" {
+		return fmt.Errorf("city is empty")
+	}
+	agp.addWhere(fmt.Sprintf("a.city = \"%s\"", param))
+	return nil
+}
+
+func countryRecommendParser(param string, agp *AccountRecommendParam) error {
+	if param == "" {
+		return fmt.Errorf("country is empty")
+	}
+	agp.addWhere(fmt.Sprintf("a.country = \"%s\"", param))
+	return nil
+}
+
+func noopRecommendParser(param string, agp *AccountRecommendParam) error {
+	return nil
+}
+
+type AccountRecommendFunc func(param string, agp *AccountRecommendParam) error
+
+var accountRecommendFuncs = map[string]AccountRecommendFunc{
+	"limit":    limitRecommendParser,
+	"city":     cityRecommendParser,
+	"country":  countryRecommendParser,
+	"query_id": noopRecommendParser,
+}
+
+func accountsRecommendParser(idStr string, queryParams url.Values) (arp *AccountRecommendParam, err error) {
+	arp = &AccountRecommendParam{-1, bytes.Buffer{}, -1}
+	if err = idRecommendParser(idStr, arp); err != nil {
+		return
+	}
+
+	for field, param := range queryParams {
+		if param[0] == "" {
+			err = fmt.Errorf("parameter cannot be empty (field = %s)", field)
+			return
+		}
+		fun, found := accountRecommendFuncs[field]
+		if !found {
+			err = fmt.Errorf("filter (%s) not found", field)
+			return
+		}
+		if len(param) != 1 {
+			err = fmt.Errorf("multiple params in filter (%s)", field)
+			return
+		}
+		if err = fun(param[0], arp); err != nil {
+			return
+		}
+	}
+	if arp.limit == -1 {
+		err = fmt.Errorf("limit is not specified")
+		return
+	}
+	if arp.id == -1 {
+		err = fmt.Errorf("id is not specified")
+		return
+	}
+
+	return
+}
+
+func accountsRecommendCore(idStr string, queryParams url.Values) ([]*common.Account, *HlcHttpError) {
+	arp, err := accountsRecommendParser(idStr, queryParams)
+	if err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusBadRequest, err}
+	}
+
+	var accounts []common.Account
+	if err := db.Select(&accounts, "SELECT id, birth, sex from accounts WHERE id = ?", arp.id); err != nil {
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+	if len(accounts) != 1 {
+		return nil, &HlcHttpError{http.StatusNotFound, err}
+	}
+	account := accounts[0]
+
+	var interests []common.Interest
+	if err := db.Select(&interests, "SELECT interest from interests WHERE account_id = ?", arp.id); err != nil {
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+	if len(interests) == 0 {
+		return nil, nil
+	}
+
+	joinedInterests := bytes.Buffer{}
+	for _, i := range interests {
+		if joinedInterests.Len() != 0 {
+			joinedInterests.WriteString(", ")
+		}
+		joinedInterests.WriteString("\"")
+		joinedInterests.WriteString(i.Interest)
+		joinedInterests.WriteString("\"")
+	}
+
+	oppositeSex := 3 - account.Sex
+
+	queryTemplate := `
+SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname, a.birth, a.premium_start, a.premium_end
+FROM accounts as a, (
+ SELECT account_id, COUNT(account_id) AS ` + "`count`" + `
+ FROM interests
+ WHERE interest in (%s)
+ GROUP BY account_id
+ ) as b
+WHERE
+ a.sex = %d
+ AND a.id != %d
+ AND %s
+ AND a.id = b.account_id
+ORDER BY
+a.premium_now DESC
+, a.status_for_recommend DESC
+, b.count DESC
+, abs(a.birth - %d) ASC
+LIMIT %d
+`
+	wheres1 := arp.wheres
+	if wheres1.Len() != 0 {
+		wheres1.WriteString(" AND ")
+	}
+	wheres1.WriteString("b.count != 0")
+
+	query1 := fmt.Sprintf(queryTemplate,
+		joinedInterests.String(), oppositeSex, account.ID, wheres1.String(), account.Birth, arp.limit)
+	log.Printf("query := %s", query1)
+
+	var acs []*common.Account
+	if err := db.Select(&acs, query1); err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+
+	if len(acs) < arp.limit {
+		wheres2 := arp.wheres
+		if wheres2.Len() != 0 {
+			wheres2.WriteString(" AND ")
+		}
+		wheres2.WriteString("b.count = 0")
+
+		query2 := fmt.Sprintf(queryTemplate,
+			joinedInterests.String(), oppositeSex, account.ID, wheres2.String(), account.Birth, arp.limit-len(acs))
+		log.Printf("additional query := %s", query2)
+
+		var acs2 []*common.Account
+		if err := db.Select(&acs2, query2); err != nil {
+			log.Print(err)
+			return nil, &HlcHttpError{http.StatusInternalServerError, err}
+		}
+
+		acs = append(acs, acs2...)
+	}
+
+	return acs, nil
+}
+
+func accountsRecommendHandler(c echo.Context) error {
+
+	acs, err := accountsRecommendCore(c.Param("id"), c.QueryParams())
+	if err != nil {
+		return c.String(err.httpStatusCode, "")
+	}
+
+	rac := common.RawAccountsContainer{[]*common.RawAccount{}}
+	for _, ac := range acs {
+		rac.Accounts = append(rac.Accounts, ac.ToRawAccount())
+	}
+
+	return common.JsonResponseWithoutChunking(c, http.StatusOK, &rac)
 }
 
 func accountsSuggestHandler(c echo.Context) error {
@@ -893,7 +1108,7 @@ func accountsLikesHandler(c echo.Context) error {
 	return nil
 }
 
-func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json string)) {
+func loadAnsw(pathRegex string, callback func(url *url.URL, matched []string, status int, json string)) {
 	fp, err := os.Open("./testdata/answers/phase_1_get.answ")
 	if err != nil {
 		log.Fatal(err)
@@ -909,7 +1124,9 @@ func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json str
 		if err != nil {
 			log.Fatal(err)
 		}
-		if !r.MatchString(url.Path) {
+
+		matched := r.FindStringSubmatch(url.Path)
+		if matched == nil {
 			continue
 		}
 
@@ -921,7 +1138,7 @@ func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json str
 		if len(tmp) > 3 {
 			j = tmp[3]
 		}
-		callback(url, status, j)
+		callback(url, matched, status, j)
 	}
 	if err := scanner.Err(); err != nil {
 		panic(err)
@@ -929,7 +1146,7 @@ func loadAnsw(pathRegex string, callback func(url *url.URL, status int, json str
 }
 
 func testAccountsFilter(c echo.Context) error {
-	loadAnsw(`/accounts/filter/`, func(url *url.URL, status int, j string) {
+	loadAnsw(`/accounts/filter/`, func(url *url.URL, _ []string, status int, j string) {
 		ansAfa := common.RawAccountsContainer{}
 		if status == 200 {
 			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
@@ -965,7 +1182,7 @@ func testAccountsFilter(c echo.Context) error {
 }
 
 func testAccountsGroup(c echo.Context) error {
-	loadAnsw(`/accounts/group/$`, func(url *url.URL, status int, j string) {
+	loadAnsw(`/accounts/group/$`, func(url *url.URL, _ []string, status int, j string) {
 		ansGr := RawGroupResponses{}
 		if status == 200 {
 			if err := json.Unmarshal([]byte(j), &ansGr); err != nil {
@@ -1004,6 +1221,42 @@ func testAccountsGroup(c echo.Context) error {
 	return c.HTML(http.StatusOK, "tested")
 }
 
+func testAccountsRecommend(c echo.Context) error {
+	loadAnsw(`/accounts/([0-9]+)/recommend/$`, func(url *url.URL, matched []string, status int, j string) {
+		ansAfa := &common.RawAccountsContainer{}
+		if status == 200 {
+			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		afa, err := accountsRecommendCore(matched[1], url.Query())
+		if status != 200 {
+			if err == nil || status != err.httpStatusCode {
+				log.Fatal(url, "status mismatch")
+			}
+			return
+		}
+
+		if err != nil {
+			log.Fatal(url, err)
+		}
+
+		if len(ansAfa.Accounts) != len(afa) {
+			log.Fatal("length mismatch")
+		}
+
+		for i := 0; i < len(ansAfa.Accounts); i++ {
+			r := afa[i].ToRawAccount()
+			if !ansAfa.Accounts[i].Equal(r) {
+				log.Fatal("item mismatch")
+			}
+		}
+	})
+
+	return c.HTML(http.StatusOK, "tested")
+}
+
 func httpMain() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -1027,6 +1280,7 @@ func httpMain() {
 
 	e.GET("/tests/filter/", testAccountsFilter)
 	e.GET("/tests/group/", testAccountsGroup)
+	e.GET("/tests/recommend/", testAccountsRecommend)
 	e.Start(":" + port)
 }
 

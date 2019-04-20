@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type RawPremium struct {
@@ -39,19 +40,21 @@ type RawAccountsContainer struct {
 }
 
 type Account struct {
-	ID            int    `db:"id"`
-	Fname         string `db:"fname"`
-	Sname         string `db:"sname"`
-	Email         string `db:"email"`
-	Status        int8   `db:"status"`
-	Premium_start int    `db:"premium_start"`
-	Premium_end   int    `db:"premium_end"`
-	Sex           int8   `db:"sex"`
-	Phone         string `db:"phone"`
-	Birth         int    `db:"birth"`
-	City          string `db:"city"`
-	Country       string `db:"country"`
-	Joined        int    `db:"joined"`
+	ID                 int    `db:"id"`
+	Fname              string `db:"fname"`
+	Sname              string `db:"sname"`
+	Email              string `db:"email"`
+	Status             int8   `db:"status"`
+	StatusForRecommend int8   `db:"status_for_recommend"`
+	Premium_start      int    `db:"premium_start"`
+	Premium_end        int    `db:"premium_end"`
+	Premium_now        bool   `db:"premium_now"`
+	Sex                int8   `db:"sex"`
+	Phone              string `db:"phone"`
+	Birth              int    `db:"birth"`
+	City               string `db:"city"`
+	Country            string `db:"country"`
+	Joined             int    `db:"joined"`
 }
 
 type AccountContainer struct {
@@ -90,6 +93,9 @@ func SexFromString(s string) int8 {
 	return int8(SliceIndex(SEXES, s) + 1)
 }
 
+//2019-01-24:13:34:29 - 21:00:00
+var PREMIUM_NOW_UNIX = int(time.Date(2019, 1, 24, 15, 0, 0, 0, time.UTC).Unix())
+
 func (rawAccount *RawAccount) ToAccount() *Account {
 	var a Account
 	a.ID = rawAccount.ID
@@ -97,9 +103,13 @@ func (rawAccount *RawAccount) ToAccount() *Account {
 	a.Sname = rawAccount.Sname
 	a.Email = rawAccount.Email
 	a.Status = StatusFromString(rawAccount.Status)
+	recMap := map[int8]int8{1: 2, 2: 1, 3: 3}
+	a.StatusForRecommend = recMap[a.Status]
+
 	if rawAccount.Premium != nil {
 		a.Premium_start = rawAccount.Premium.Start
 		a.Premium_end = rawAccount.Premium.Finish
+		a.Premium_now = a.Premium_start <= PREMIUM_NOW_UNIX && PREMIUM_NOW_UNIX <= a.Premium_end
 	}
 	a.Sex = SexFromString(rawAccount.Sex)
 	a.Phone = rawAccount.Phone
@@ -257,8 +267,14 @@ func (a *Account) Oneline() string {
 	olb.appendString(a.City)
 	olb.appendInt(a.Joined)
 	olb.appendInt(int(a.Status))
+	olb.appendInt(int(a.StatusForRecommend))
 	olb.appendInt(a.Premium_start)
 	olb.appendInt(a.Premium_end)
+	intPremiumNow := 0
+	if a.Premium_now {
+		intPremiumNow = 1
+	}
+	olb.appendInt(intPremiumNow)
 	return olb.build()
 }
 
@@ -274,8 +290,10 @@ func (a *Account) InsertArgs() []interface{} {
 		a.City,
 		a.Joined,
 		int(a.Status),
+		int(a.StatusForRecommend),
 		a.Premium_start,
 		a.Premium_end,
+		a.Premium_now,
 	}
 }
 

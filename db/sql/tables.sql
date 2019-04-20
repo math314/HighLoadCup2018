@@ -10,8 +10,10 @@ CREATE TABLE accounts (
   city varchar(50), # rare
   joined INT NOT NULL,
   `status` tinyint(1),
+  status_for_recommend tinyint(1),
   premium_start INT NOT NULL,
   premium_end INT NOT NULL,
+  premium_now tinyint(1) NOT NULL,
 
   PRIMARY KEY (`id`)
 );
