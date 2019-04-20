@@ -1021,9 +1021,9 @@ func httpMain() {
 	e.GET("/accounts/group/", accountsGroupHandler)
 	e.GET("/accounts/:id/recommend/", accountsRecommendHandler)
 	e.GET("/accounts/:id/suggest/", accountsSuggestHandler)
-	e.POST("/accounts/new/", accountsNewHandler)
-	e.POST("/accounts/:id/", accountsIdHandler)
-	e.POST("/accounts/likes/", accountsLikesHandler)
+	//e.POST("/accounts/new/", accountsNewHandler)
+	//e.POST("/accounts/:id/", accountsIdHandler)
+	//e.POST("/accounts/likes/", accountsLikesHandler)
 
 	e.GET("/tests/filter/", testAccountsFilter)
 	e.GET("/tests/group/", testAccountsGroup)
