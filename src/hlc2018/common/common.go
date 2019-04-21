@@ -1,13 +1,14 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/labstack/echo"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type RawPremium struct {
@@ -93,8 +94,18 @@ func SexFromString(s string) int8 {
 	return int8(SliceIndex(SEXES, s) + 1)
 }
 
-//2019-01-24:13:34:29 - 21:00:00
-var PREMIUM_NOW_UNIX = int(time.Date(2019, 1, 24, 15, 0, 0, 0, time.UTC).Unix())
+var PREMIUM_NOW_UNIX int
+
+func init() {
+	contents, err := ioutil.ReadFile("/tmp/data/options.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	PREMIUM_NOW_UNIX, err = strconv.Atoi(strings.Split(string(contents), "\n")[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 func (rawAccount *RawAccount) ToAccount() *Account {
 	var a Account
@@ -330,4 +341,15 @@ func JsonResponseWithoutChunking(c echo.Context, code int, val interface{}) erro
 	}
 
 	return nil
+}
+
+func IntArrayJoin(val []int, sep string) string {
+	bb := bytes.Buffer{}
+	for _, id := range val {
+		if bb.Len() != 0 {
+			bb.WriteString(sep)
+		}
+		bb.WriteString(strconv.Itoa(id))
+	}
+	return bb.String()
 }

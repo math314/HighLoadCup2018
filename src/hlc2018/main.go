@@ -284,15 +284,8 @@ func likesContainsFilter(param string, sb *sqlBuilder) error {
 	if len(liker) == 0 {
 		liker = []int{-1}
 	}
-	likerStr := bytes.Buffer{}
-	for _, id := range liker {
-		if likerStr.Len() != 0 {
-			likerStr.WriteString(",")
-		}
-		likerStr.WriteString(strconv.Itoa(id))
-	}
 
-	sb.addWhere(fmt.Sprintf("id in (%s)", likerStr.String()))
+	sb.addWhere(fmt.Sprintf("id in (%s)", common.IntArrayJoin(liker, ",")))
 	return nil
 }
 
@@ -478,16 +471,9 @@ func likesGroupParser(param string, agp *AccountGroupParam) error {
 	if len(liker) == 0 {
 		liker = []int{-1}
 	}
-	likerStr := bytes.Buffer{}
-	for _, id := range liker {
-		if likerStr.Len() != 0 {
-			likerStr.WriteString(",")
-		}
-		likerStr.WriteString(strconv.Itoa(id))
-	}
 
 	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.id in (%s)", likerStr.String()))
+	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntArrayJoin(liker, ",")))
 	return nil
 }
 
@@ -1011,21 +997,91 @@ func accountsSuggestCore(idStr string, queryParams url.Values) ([]*common.Accoun
 	}
 
 	var accounts []common.Account
-	if err := db.Select(&accounts, "SELECT id, birth, sex from accounts WHERE id = ?", arp.id); err != nil {
+	if err := db.Select(&accounts, "SELECT id, sex from accounts WHERE id = ?", arp.id); err != nil {
 		return nil, &HlcHttpError{http.StatusInternalServerError, err}
 	}
 	if len(accounts) != 1 {
 		return nil, &HlcHttpError{http.StatusNotFound, err}
 	}
 	account := accounts[0]
-	log.Print(account)
 
-	return nil, nil
+	orderedLiker := ls.OrderByLikeSimilarity(account.ID)
+	if len(orderedLiker) == 0 {
+		return nil, nil
+	}
+
+	wheres := ""
+	if arp.wheres.Len() != 0 {
+		wheres = " AND " + arp.wheres.String()
+	}
+
+	queryTemplate := `SELECT id FROM accounts as a WHERE sex = %d AND a.id in (%s) %s`
+	query := fmt.Sprintf(queryTemplate, account.Sex, common.IntArrayJoin(orderedLiker, ","), wheres)
+	log.Print(query)
+
+	var filteredIds []int
+	if err := db.Select(&filteredIds, query); err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+	if len(filteredIds) == 0 {
+		return nil, nil
+	}
+
+	filteredIdsMap := map[int]struct{}{}
+	for _, a := range filteredIds {
+		filteredIdsMap[a] = struct{}{}
+	}
+	orderedRetIds := []int{}
+	retIds := map[int]struct{}{}
+	for _, id := range orderedLiker {
+		if _, ok := filteredIdsMap[id]; !ok {
+			continue
+		}
+
+		ls.GetNotLiked(account.ID, id, &retIds, &orderedRetIds, arp.limit)
+		if len(retIds) == arp.limit {
+			break
+		}
+	}
+
+	query2 := fmt.Sprintf(`
+SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname
+FROM accounts AS a
+WHERE a.id in (%s)
+`, common.IntArrayJoin(orderedRetIds, ","))
+
+	var retAcocuntInfo []*common.Account
+	if err := db.Select(&retAcocuntInfo, query2); err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+
+	accountMap := map[int]*common.Account{}
+	for _, a := range retAcocuntInfo {
+		accountMap[a.ID] = a
+	}
+
+	var ret []*common.Account
+	for _, id := range orderedRetIds {
+		ret = append(ret, accountMap[id])
+	}
+
+	return ret, nil
 }
 
 func accountsSuggestHandler(c echo.Context) error {
-	// acs, err := accountsRecommendCore(c.Param("id"), c.QueryParams())
-	return nil
+	acs, err := accountsSuggestCore(c.Param("id"), c.QueryParams())
+	if err != nil {
+		return c.String(err.httpStatusCode, "")
+	}
+
+	rac := common.RawAccountsContainer{[]*common.RawAccount{}}
+	for _, ac := range acs {
+		rac.Accounts = append(rac.Accounts, ac.ToRawAccount())
+	}
+
+	return common.JsonResponseWithoutChunking(c, http.StatusOK, &rac)
 }
 
 func InsertAccount(tx *sql.Tx, account *common.Account) error {
@@ -1059,11 +1115,6 @@ func InsertLikes(tx *sql.Tx, likes []*common.Like) error {
 	for _, v := range likes {
 		ls.InsertCommonLike(v)
 	}
-	return nil
-}
-
-func DeleteLikes(tx *sql.Tx, accountId int) error {
-	ls.DeleteLikes(accountId)
 	return nil
 }
 
@@ -1302,6 +1353,45 @@ func testAccountsRecommend(c echo.Context) error {
 	return c.HTML(http.StatusOK, "tested")
 }
 
+func testAccountsSuggest(c echo.Context) error {
+	loadAnsw(`/accounts/([0-9]+)/suggest/$`, func(url *url.URL, matched []string, status int, j string) {
+		ansAfa := &common.RawAccountsContainer{}
+		if status == 200 {
+			if err := json.Unmarshal([]byte(j), &ansAfa); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if 0 < len(ansAfa.Accounts) && len(ansAfa.Accounts) < 5 {
+			log.Print(ansAfa)
+		}
+
+		afa, err := accountsSuggestCore(matched[1], url.Query())
+		if status != 200 {
+			if err == nil || status != err.httpStatusCode {
+				log.Fatal(url, "status mismatch")
+			}
+			return
+		}
+
+		if err != nil {
+			log.Fatal(url, err)
+		}
+
+		if len(ansAfa.Accounts) != len(afa) {
+			log.Print("length mismatch")
+		}
+
+		for i := 0; i < len(ansAfa.Accounts); i++ {
+			r := afa[i].ToRawAccount()
+			if !ansAfa.Accounts[i].Equal(r) {
+				log.Print("item mismatch")
+			}
+		}
+	})
+
+	return c.HTML(http.StatusOK, "tested")
+}
+
 func httpMain() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -1326,6 +1416,7 @@ func httpMain() {
 	e.GET("/tests/filter/", testAccountsFilter)
 	e.GET("/tests/group/", testAccountsGroup)
 	e.GET("/tests/recommend/", testAccountsRecommend)
+	e.GET("/tests/suggest/", testAccountsSuggest)
 	e.Start(":" + port)
 }
 

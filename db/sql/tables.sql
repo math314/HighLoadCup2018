@@ -22,5 +22,3 @@ CREATE TABLE interests (
   account_id INT NOT NULL,
   interest varchar(100)
 );
-
-
