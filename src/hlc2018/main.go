@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"hlc2018/common"
+	"hlc2018/store"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 
 var (
 	db *sqlx.DB
+	ls = store.New()
 )
 
 func init() {
@@ -269,15 +271,28 @@ func interestsContainsFilter(param string, sb *sqlBuilder) error {
 }
 
 func likesContainsFilter(param string, sb *sqlBuilder) error {
+	var liked []int
 	for _, s := range strings.Split(param, ",") {
-		_, err := strconv.Atoi(s)
+		id, err := strconv.Atoi(s)
 		if err != nil {
 			return fmt.Errorf("failed to parse likes (%s)", param)
 		}
+		liked = append(liked, id)
 	}
 
-	paramLen := strings.Count(param, ",") + 1
-	sb.addWhere(fmt.Sprintf("id in (SELECT account_id_from from likes WHERE account_id_to in (%s) GROUP BY account_id_from HAVING COUNT(account_id_from) = %d)", param, paramLen))
+	liker := ls.IdsContainAllLikes(liked)
+	if len(liker) == 0 {
+		liker = []int{-1}
+	}
+	likerStr := bytes.Buffer{}
+	for _, id := range liker {
+		if likerStr.Len() != 0 {
+			likerStr.WriteString(",")
+		}
+		likerStr.WriteString(strconv.Itoa(id))
+	}
+
+	sb.addWhere(fmt.Sprintf("id in (%s)", likerStr.String()))
 	return nil
 }
 
@@ -459,8 +474,20 @@ func likesGroupParser(param string, agp *AccountGroupParam) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse like (%s)", param)
 	}
+	liker := ls.IdsContainAnyLikes([]int{like})
+	if len(liker) == 0 {
+		liker = []int{-1}
+	}
+	likerStr := bytes.Buffer{}
+	for _, id := range liker {
+		if likerStr.Len() != 0 {
+			likerStr.WriteString(",")
+		}
+		likerStr.WriteString(strconv.Itoa(id))
+	}
+
 	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.id in (SELECT account_id_from FROM likes WHERE account_id_to = %d)", like))
+	agp.addWhere(fmt.Sprintf("a.id in (%s)", likerStr.String()))
 	return nil
 }
 
@@ -963,7 +990,6 @@ LIMIT %d
 }
 
 func accountsRecommendHandler(c echo.Context) error {
-
 	acs, err := accountsRecommendCore(c.Param("id"), c.QueryParams())
 	if err != nil {
 		return c.String(err.httpStatusCode, "")
@@ -977,7 +1003,28 @@ func accountsRecommendHandler(c echo.Context) error {
 	return common.JsonResponseWithoutChunking(c, http.StatusOK, &rac)
 }
 
+func accountsSuggestCore(idStr string, queryParams url.Values) ([]*common.Account, *HlcHttpError) {
+	arp, err := accountsRecommendParser(idStr, queryParams)
+	if err != nil {
+		log.Print(err)
+		return nil, &HlcHttpError{http.StatusBadRequest, err}
+	}
+
+	var accounts []common.Account
+	if err := db.Select(&accounts, "SELECT id, birth, sex from accounts WHERE id = ?", arp.id); err != nil {
+		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	}
+	if len(accounts) != 1 {
+		return nil, &HlcHttpError{http.StatusNotFound, err}
+	}
+	account := accounts[0]
+	log.Print(account)
+
+	return nil, nil
+}
+
 func accountsSuggestHandler(c echo.Context) error {
+	// acs, err := accountsRecommendCore(c.Param("id"), c.QueryParams())
 	return nil
 }
 
@@ -1010,16 +1057,14 @@ func DeleteInterests(tx *sql.Tx, accountId int) error {
 
 func InsertLikes(tx *sql.Tx, likes []*common.Like) error {
 	for _, v := range likes {
-		if _, err := tx.Exec("INSERT INTO likes(account_id_from, account_id_to, ts) VALUES(?,?,?)", v.AccountIdFrom, v.AccountIdTo, v.Ts); err != nil {
-			return err
-		}
+		ls.InsertCommonLike(v)
 	}
 	return nil
 }
 
 func DeleteLikes(tx *sql.Tx, accountId int) error {
-	_, err := tx.Exec("DELETE FROM likes WHERE account_id_from = ?", accountId)
-	return err
+	ls.DeleteLikes(accountId)
+	return nil
 }
 
 func accountsNewHandlerCore(rc *common.RawAccount) *HlcHttpError {
@@ -1300,7 +1345,7 @@ func loadDataInFile(tableName string, fields string, data []byte) {
 	log.Print(result)
 }
 
-func mysqlDataLoader() {
+func mysqlDataLoader(loadToMySQL, loadToMemory bool) {
 	r, err := zip.OpenReader("/tmp/data/data.zip")
 	if err != nil {
 		log.Fatal(err)
@@ -1337,32 +1382,31 @@ func mysqlDataLoader() {
 			}
 		}
 
-		sb := bytes.Buffer{}
-		for _, a := range accounts {
-			sb.WriteString(a.Oneline())
-		}
-		loadDataInFile("accounts", "", sb.Bytes())
+		if loadToMySQL {
+			sb := bytes.Buffer{}
+			for _, a := range accounts {
+				sb.WriteString(a.Oneline())
+			}
+			loadDataInFile("accounts", "", sb.Bytes())
 
-		sb = bytes.Buffer{}
-		for _, i := range interests {
-			sb.WriteString(i.Oneline())
+			sb = bytes.Buffer{}
+			for _, i := range interests {
+				sb.WriteString(i.Oneline())
+			}
+			loadDataInFile("interests", "(account_id, interest)", sb.Bytes())
 		}
-		loadDataInFile("interests", "(account_id, interest)", sb.Bytes())
 
-		sb = bytes.Buffer{}
-		for _, l := range likes {
-			sb.WriteString(l.Oneline())
+		if loadToMemory {
+			for _, l := range likes {
+				ls.InsertCommonLike(l)
+			}
 		}
-		loadDataInFile("likes", "(account_id_from, account_id_to, ts)", sb.Bytes())
 	}
 }
 
 func main() {
-	load := flag.Bool("l", false, "run mysqlDataLoader")
+	simple := flag.Bool("simple", false, "run without mysqlDataLoader")
 	flag.Parse()
-	if *load {
-		mysqlDataLoader()
-	} else {
-		httpMain()
-	}
+	mysqlDataLoader(!*simple, true)
+	httpMain()
 }

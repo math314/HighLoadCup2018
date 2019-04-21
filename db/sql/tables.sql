@@ -19,19 +19,8 @@ CREATE TABLE accounts (
 );
 
 CREATE TABLE interests (
-  id INT NOT NULL AUTO_INCREMENT,
   account_id INT NOT NULL,
-  interest varchar(100),
-
-  PRIMARY KEY (`id`)
+  interest varchar(100)
 );
 
-CREATE TABLE likes (
-  id INT NOT NULL AUTO_INCREMENT,
-  account_id_from INT NOT NULL,
-  account_id_to INT NOT NULL,
-  ts INT NOT NULL,
-
-  PRIMARY KEY (`id`)
-);
 
