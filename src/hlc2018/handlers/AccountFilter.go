@@ -263,33 +263,33 @@ func nullFilterGenerator(name string) FilterFunc {
 }
 
 var filterFuncs = map[string]FilterFunc{
-	"sex_eq":             SexEqFilter,
+	"sex_eq":             SexEqFilter, // 1/2
 	"email_domain":       emailDomainFilter,
 	"email_lt":           emailLtFilter,
 	"email_gt":           emailGtFilter,
-	"status_eq":          StatusEqFilter,
-	"status_neq":         StatusNeqFilter,
-	"fname_eq":           eqFilterGenerator("fname"),
+	"status_eq":          StatusEqFilter,             // 1/3
+	"status_neq":         StatusNeqFilter,            // 2/3
+	"fname_eq":           eqFilterGenerator("fname"), // 1/100 ~ 1/150
 	"fname_any":          fnameAnyFilter,
-	"fname_null":         nullFilterGenerator("fname"),
-	"sname_eq":           eqFilterGenerator("sname"),
+	"fname_null":         nullFilterGenerator("fname"), // 1/15
+	"sname_eq":           eqFilterGenerator("sname"),   // 1 / 1000
 	"sname_starts":       snameStartsFilter,
-	"sname_null":         nullFilterGenerator("sname"),
-	"phone_code":         phoneCodeFilter,
-	"phone_null":         nullFilterGenerator("phone"),
-	"country_eq":         eqFilterGenerator("country"),
-	"country_null":       nullFilterGenerator("country"),
-	"city_eq":            eqFilterGenerator("city"),
-	"city_any":           cityAnyFilter,
-	"city_null":          nullFilterGenerator("city"),
+	"sname_null":         nullFilterGenerator("sname"),   // 1/4
+	"phone_code":         phoneCodeFilter,                // 1/200 ~ 1/300 NOTE: only (900) ~ (999) are available
+	"phone_null":         nullFilterGenerator("phone"),   // 1/2
+	"country_eq":         eqFilterGenerator("country"),   // 1/40 ~ 1/100
+	"country_null":       nullFilterGenerator("country"), // 1/6
+	"city_eq":            eqFilterGenerator("city"),      // 1/300
+	"city_any":           cityAnyFilter,                  // ?
+	"city_null":          nullFilterGenerator("city"),    //  1/3
 	"birth_lt":           birthLtFilter,
 	"birth_gt":           birthGtFilter,
 	"birth_year":         birthYearFilter,
-	"interests_contains": interestsContainsFilter,
-	"interests_any":      interestsAnyFilter,
+	"interests_contains": interestsContainsFilter, // 1/30 if length == 1
+	"interests_any":      interestsAnyFilter,      // 1/30 if length == 1
 	"likes_contains":     likesContainsFilter,
-	"premium_now":        premiumNowFilter,
-	"premium_null":       premiumNullFilter,
+	"premium_now":        premiumNowFilter,  // 1/10
+	"premium_null":       premiumNullFilter, // 2/3
 	"limit":              limitFilter,
 	"query_id":           noopFilter,
 }
