@@ -951,27 +951,6 @@ LIMIT %d
 		log.Print(err)
 		return nil, &HlcHttpError{http.StatusInternalServerError, err}
 	}
-
-	if len(acs) < arp.limit {
-		wheres2 := arp.wheres
-		if wheres2.Len() != 0 {
-			wheres2.WriteString(" AND ")
-		}
-		wheres2.WriteString("b.count = 0")
-
-		query2 := fmt.Sprintf(queryTemplate,
-			joinedInterests.String(), oppositeSex, account.ID, wheres2.String(), account.Birth, arp.limit-len(acs))
-		log.Printf("additional query := %s", query2)
-
-		var acs2 []*common.Account
-		if err := db.Select(&acs2, query2); err != nil {
-			log.Print(err)
-			return nil, &HlcHttpError{http.StatusInternalServerError, err}
-		}
-
-		acs = append(acs, acs2...)
-	}
-
 	return acs, nil
 }
 
