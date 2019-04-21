@@ -6,28 +6,28 @@ import (
 	"sort"
 )
 
-type StoredLike struct {
+type storedLike struct {
 	to, ts int
 }
 
-type StoredLikeFloat64 struct {
+type storedLikeFloat64 struct {
 	to int
 	ts float64
 }
 
 type LikeStore struct {
-	forward, backward [][]StoredLike
+	forward, backward [][]storedLike
 	forwardMap        []map[int]struct{}
 }
 
-func New() *LikeStore {
+func NewLikeStore() *LikeStore {
 	return &LikeStore{}
 }
 
 func (ls *LikeStore) ExtendSizeIfNeeded(nextSize int) {
 	for len(ls.forward) < nextSize {
-		ls.forward = append(ls.forward, []StoredLike{})
-		ls.backward = append(ls.backward, []StoredLike{})
+		ls.forward = append(ls.forward, []storedLike{})
+		ls.backward = append(ls.backward, []storedLike{})
 		ls.forwardMap = append(ls.forwardMap, map[int]struct{}{})
 	}
 }
@@ -39,9 +39,9 @@ func (ls *LikeStore) InsertLike(from, to, ts int) {
 		ls.ExtendSizeIfNeeded(from + 1)
 	}
 
-	ls.forward[from] = append(ls.forward[from], StoredLike{to, ts})
+	ls.forward[from] = append(ls.forward[from], storedLike{to, ts})
 	ls.forwardMap[from][to] = struct{}{}
-	ls.backward[to] = append(ls.backward[to], StoredLike{from, ts})
+	ls.backward[to] = append(ls.backward[to], storedLike{from, ts})
 }
 
 func (ls *LikeStore) InsertCommonLike(like *common.Like) {
@@ -92,18 +92,18 @@ func (ls *LikeStore) IdsContainAnyLikes(ids []int) []int {
 	return ret
 }
 
-func composed(mp []StoredLike) []StoredLikeFloat64 {
+func composed(mp []storedLike) []storedLikeFloat64 {
 	ret := map[int][]int{}
 	for _, sl := range mp {
 		ret[sl.to] = append(ret[sl.to], sl.ts)
 	}
-	var ret2 []StoredLikeFloat64
+	var ret2 []storedLikeFloat64
 	for id, vals := range ret {
 		sum := 0
 		for _, x := range vals {
 			sum += x
 		}
-		ret2 = append(ret2, StoredLikeFloat64{id, float64(sum) / float64(len(vals))})
+		ret2 = append(ret2, storedLikeFloat64{id, float64(sum) / float64(len(vals))})
 	}
 	return ret2
 }

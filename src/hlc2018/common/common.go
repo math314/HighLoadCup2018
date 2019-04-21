@@ -353,3 +353,14 @@ func IntArrayJoin(val []int, sep string) string {
 	}
 	return bb.String()
 }
+
+func IntMapJoin(val map[int]struct{}, sep string) string {
+	bb := bytes.Buffer{}
+	for id, _ := range val {
+		if bb.Len() != 0 {
+			bb.WriteString(sep)
+		}
+		bb.WriteString(strconv.Itoa(id))
+	}
+	return bb.String()
+}
