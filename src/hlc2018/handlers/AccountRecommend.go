@@ -131,6 +131,9 @@ func AccountsRecommendCore(idStr string, queryParams url.Values) ([]*common.Acco
 		return nil, &HlcHttpError{http.StatusNotFound, err}
 	}
 
+	arpCountryId := globals.As.GetCountryId(arp.country)
+	arpCityId := globals.As.GetCityId(arp.city)
+
 	interestsCounts := globals.Is.GetSuggestInterestIds(account.ID)
 	filteredInterestingsCounts := map[int]int{}
 	for k, v := range interestsCounts {
@@ -141,13 +144,13 @@ func AccountsRecommendCore(idStr string, queryParams url.Values) ([]*common.Acco
 		if a.Sex+account.Sex != 3 {
 			continue
 		}
-		if arp.country != "" {
-			if arp.country != a.Country {
+		if arpCountryId != 0 {
+			if arpCountryId != a.Country {
 				continue
 			}
 		}
-		if arp.city != "" {
-			if arp.city != a.City {
+		if arpCityId != 0 {
+			if arpCityId != a.City {
 				continue
 			}
 		}

@@ -48,17 +48,39 @@ type StoredAccount struct {
 	Sex           int8
 	Phone         CompressedPhone
 	Birth         int
-	City          string
-	Country       string
+	City          int
+	Country       int
 	JoinedYear    int8
 }
 
 type AccountStore struct {
-	accounts []*StoredAccount
+	countryIndex *StringIndex
+	cityIndex    *StringIndex
+	accounts     []*StoredAccount
 }
 
 func NewAccountStore() *AccountStore {
-	return &AccountStore{}
+	return &AccountStore{
+		countryIndex: NewStringIndex(),
+		cityIndex:    NewStringIndex(),
+		accounts:     nil,
+	}
+}
+
+func (as *AccountStore) GetCountryId(country string) int {
+	return as.countryIndex.sim.Get(country)
+}
+
+func (as *AccountStore) IdToCountry(id int) string {
+	return as.countryIndex.sim.strings[id]
+}
+
+func (as *AccountStore) GetCityId(country string) int {
+	return as.cityIndex.sim.Get(country)
+}
+
+func (as *AccountStore) IdToCity(id int) string {
+	return as.cityIndex.sim.strings[id]
 }
 
 func (as *AccountStore) ExtendSizeIfNeeded(nextSize int) {
@@ -77,6 +99,8 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 	if err != nil {
 		return err
 	}
+	cityCode := as.cityIndex.SetValue(a.ID, a.City)
+	countryCode := as.countryIndex.SetValue(a.ID, a.Country)
 
 	nw := &StoredAccount{
 		ID:            a.ID,
@@ -90,8 +114,8 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 		Sex:           a.Sex,
 		Phone:         cp,
 		Birth:         a.Birth,
-		City:          a.City,
-		Country:       a.Country,
+		City:          cityCode,
+		Country:       countryCode,
 		JoinedYear:    a.JoinedYear.Int8,
 	}
 	as.accounts[a.ID] = nw

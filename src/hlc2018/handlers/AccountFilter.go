@@ -404,13 +404,24 @@ func ApplyFilter(ss store.StoreSource, filter StoreFilterFunc, limit int) []int 
 	return ret
 }
 
-func IsNullStoreFilter(val string, b Tribool) bool {
+func IsNullStoreFilterString(val string, b Tribool) bool {
 	if b == TTrue {
 		return val == ""
 	} else if b == TFalse {
 		return val != ""
 	} else {
-		log.Fatal("TUndefined is provided to IsNullStoreFilter")
+		log.Fatal("TUndefined is provided to IsNullStoreFilterString")
+		return false
+	}
+}
+
+func IsNullStoreFilterInt(val int, b Tribool) bool {
+	if b == TTrue {
+		return val == 0
+	} else if b == TFalse {
+		return val != 0
+	} else {
+		log.Fatal("TUndefined is provided to IsNullStoreFilterInt")
 		return false
 	}
 }
@@ -498,7 +509,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 		}
 
 		if afp.fnameNull != TUndefined {
-			ok := IsNullStoreFilter(me.Fname, afp.fnameNull)
+			ok := IsNullStoreFilterString(me.Fname, afp.fnameNull)
 			if !ok {
 				return false
 			}
@@ -520,7 +531,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 		}
 
 		if afp.snameNull != TUndefined {
-			ok := IsNullStoreFilter(me.Sname, afp.snameNull)
+			ok := IsNullStoreFilterString(me.Sname, afp.snameNull)
 			if !ok {
 				return false
 			}
@@ -545,20 +556,20 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 		}
 
 		if afp.countryEq != "" {
-			if me.Country != afp.countryEq {
+			if me.Country != globals.As.GetCountryId(afp.countryEq) {
 				return false
 			}
 		}
 
 		if afp.countryNull != TUndefined {
-			ok := IsNullStoreFilter(me.Country, afp.countryNull)
+			ok := IsNullStoreFilterInt(me.Country, afp.countryNull)
 			if !ok {
 				return false
 			}
 		}
 
 		if afp.cityEq != "" {
-			if me.City != afp.cityEq {
+			if me.City != globals.As.GetCityId(afp.cityEq) {
 				return false
 			}
 		}
@@ -566,7 +577,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 		if len(afp.cityAny) > 0 {
 			ok := false
 			for _, f := range afp.cityAny {
-				if me.City == f {
+				if me.City == globals.As.GetCityId(f) {
 					ok = true
 					break
 				}
@@ -577,7 +588,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 		}
 
 		if afp.cityNull != TUndefined {
-			ok := IsNullStoreFilter(me.City, afp.cityNull)
+			ok := IsNullStoreFilterInt(me.City, afp.cityNull)
 			if !ok {
 				return false
 			}
@@ -736,10 +747,10 @@ func AccountsFilterCore(queryParams url.Values) (*common.AccountContainer, *HlcH
 			r.Phone = a.Phone.String()
 		}
 		if _, found := afp.selects["city"]; found {
-			r.City = a.City
+			r.City = globals.As.IdToCity(a.City)
 		}
 		if _, found := afp.selects["country"]; found {
-			r.Country = a.Country
+			r.Country = globals.As.IdToCountry(a.Country)
 		}
 		if _, found := afp.selects["birth"]; found {
 			r.Birth = a.Birth

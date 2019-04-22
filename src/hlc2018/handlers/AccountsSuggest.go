@@ -26,19 +26,22 @@ func AccountsSuggestCore(idStr string, queryParams url.Values) ([]*common.Accoun
 		return nil, nil
 	}
 
+	arpCountryId := globals.As.GetCountryId(arp.country)
+	arpCityId := globals.As.GetCityId(arp.city)
+
 	var filteredOrderedLiker []int
 	for _, id := range orderedLiker {
 		a := globals.As.GetStoredAccountWithoutError(id)
 		if a.Sex != account.Sex {
 			continue
 		}
-		if arp.country != "" {
-			if arp.country != a.Country {
+		if arpCountryId != 0 {
+			if arpCountryId != a.Country {
 				continue
 			}
 		}
-		if arp.city != "" {
-			if arp.city != a.City {
+		if arpCityId != 0 {
+			if arpCityId != a.City {
 				continue
 			}
 		}
