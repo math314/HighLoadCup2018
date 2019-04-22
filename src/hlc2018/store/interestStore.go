@@ -5,13 +5,13 @@ import (
 )
 
 type InterestStore struct {
-	interestMapper StringIdMapper
+	interestMapper *StringIdMapper
 	idToInterests  []map[int]struct{}
 	InterestsToId  []map[int]struct{}
 }
 
 func NewInterestStore() *InterestStore {
-	is := &InterestStore{StringIdMapper{map[string]int{}, nil}, nil, nil}
+	is := &InterestStore{NewStringIdMapper(), nil, nil}
 	is.insertInterestIfNeeded("")
 	return is
 }

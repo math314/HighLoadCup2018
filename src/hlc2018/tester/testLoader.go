@@ -88,8 +88,8 @@ func RunTest() {
 			before := time.Now().UnixNano()
 			route.fun(args)
 			after := time.Now().UnixNano()
-			elasped := after - before
-			log.Printf("%dms (%s)", elasped, testCase.url.String())
+			elaspedNano := after - before
+			log.Printf("%d ms (%s)", elaspedNano/1000/1000, testCase.url.String())
 
 		}
 		if !routed {

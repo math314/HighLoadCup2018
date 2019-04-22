@@ -5,6 +5,10 @@ type StringIdMapper struct {
 	strings     []string
 }
 
+func NewStringIdMapper() *StringIdMapper {
+	return &StringIdMapper{map[string]int{}, nil}
+}
+
 func (sim *StringIdMapper) insertStringIfNeeded(s string) (int, bool) {
 	val, ok := sim.stringToInt[s]
 	if ok {

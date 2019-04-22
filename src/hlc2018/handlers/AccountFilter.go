@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/echo"
 	"hlc2018/common"
 	"hlc2018/globals"
+	"hlc2018/store"
 	"log"
 	"net/http"
 	"net/url"
@@ -386,50 +387,9 @@ func accountsFilterParser(queryParams url.Values) (afp *AccountsFilterParams, er
 	return
 }
 
-type StoreSource interface {
-	Next() bool
-	Value() int
-}
-
-type RangeStoreSource struct {
-	current, end, step int
-}
-
-func (bss *RangeStoreSource) Next() bool {
-	bss.current += bss.step
-	return bss.current > bss.end
-}
-
-func (bss *RangeStoreSource) Value() int {
-	return bss.current
-}
-
-type ArrayStoreSource struct {
-	src []int
-	id  int
-}
-
-func NewArrayStoreSource(src []int) *ArrayStoreSource {
-	return &ArrayStoreSource{src, -1}
-}
-
-func (ss *ArrayStoreSource) Next() bool {
-	ss.id++
-	return ss.id < len(ss.src)
-}
-
-func (ss *ArrayStoreSource) Value() int {
-	return ss.src[ss.id]
-}
-
-func NewRangeAccountStoreSource() *RangeStoreSource {
-	l, r := globals.As.AvailableRange()
-	return &RangeStoreSource{r, l - 1, -1}
-}
-
 type StoreFilterFunc func(id int) bool
 
-func ApplyFilter(ss StoreSource, filter StoreFilterFunc, limit int) []int {
+func ApplyFilter(ss store.StoreSource, filter StoreFilterFunc, limit int) []int {
 	var ret []int
 	for ss.Next() {
 		val := ss.Value()
@@ -442,10 +402,6 @@ func ApplyFilter(ss StoreSource, filter StoreFilterFunc, limit int) []int {
 	}
 	return ret
 }
-
-//func sexEqFilterIds(ids map[int]struct{}, sex int8) map[int]struct{} {
-//	if ids == nil {}
-//}
 
 func IsNullStoreFilter(val string, b Tribool) bool {
 	if b == TTrue {
@@ -667,7 +623,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 	}
 }
 
-func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*AccountsFilterParams, StoreSource) {
+func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*AccountsFilterParams, store.StoreSource) {
 	afp := *originalAfp
 	//?
 	if len(afp.likeContains) > 0 {
@@ -675,7 +631,7 @@ func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Accounts
 		sort.Sort(sort.Reverse(sort.IntSlice(liker)))
 
 		afp.likeContains = nil
-		return &afp, NewArrayStoreSource(liker)
+		return &afp, store.NewArrayStoreSource(liker)
 	}
 
 	// 1/30 if length == 1
@@ -690,7 +646,7 @@ func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Accounts
 		sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 
 		afp.interestsContains = nil
-		return &afp, NewArrayStoreSource(ids)
+		return &afp, store.NewArrayStoreSource(ids)
 	}
 
 	// 1/30 if length == 1
@@ -704,7 +660,7 @@ func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Accounts
 		sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 
 		afp.interestsAny = nil
-		return &afp, NewArrayStoreSource(ids)
+		return &afp, store.NewArrayStoreSource(ids)
 	}
 
 	//
@@ -734,7 +690,7 @@ func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Accounts
 	//	"premium_null":       premiumNullFilter, // 2/3
 
 	// default because there're no index
-	return &afp, NewRangeAccountStoreSource()
+	return &afp, globals.As.NewRangeAccountStoreSource()
 }
 
 func filterIds(originalAfp *AccountsFilterParams) []int {

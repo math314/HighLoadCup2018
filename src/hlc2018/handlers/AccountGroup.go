@@ -16,11 +16,19 @@ import (
 )
 
 type AccountGroupParam struct {
-	keys   map[string]struct{}
-	froms  map[string]struct{}
-	wheres bytes.Buffer
-	limit  int
-	order  int
+	keys            map[string]struct{}
+	froms           map[string]struct{}
+	wheres          bytes.Buffer
+	limit           int
+	order           int
+	sexEq           int8
+	likeContain     int
+	countryEq       string
+	cityEq          string
+	joinedYear      common.JoinedYear
+	statusEq        int8
+	interestContain string
+	birthYear       int
 }
 
 func (agp *AccountGroupParam) addFrom(s string) {
@@ -43,6 +51,7 @@ func sexGroupParser(param string, agp *AccountGroupParam) error {
 	}
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("a.sex = %d", sex))
+	agp.sexEq = sex
 	return nil
 }
 
@@ -58,12 +67,14 @@ func likesGroupParser(param string, agp *AccountGroupParam) error {
 
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntArrayJoin(liker, ",")))
+	agp.likeContain = like
 	return nil
 }
 
 func countryGroupParser(param string, agp *AccountGroupParam) error {
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("a.country = \"%s\"", param))
+	agp.countryEq = param
 	return nil
 }
 
@@ -91,9 +102,11 @@ func joinedGroupParser(param string, agp *AccountGroupParam) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse joined (%s)", param)
 	}
+	jy := common.ToJoinedYear(joined)
 
 	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.joined_year = %d", joined-2000))
+	agp.addWhere(fmt.Sprintf("a.joined_year = %d", jy.Int8))
+	agp.joinedYear = jy
 
 	return nil
 }
@@ -105,6 +118,7 @@ func statusGroupParser(param string, agp *AccountGroupParam) error {
 	}
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("a.status = %d", status))
+	agp.statusEq = status
 	return nil
 }
 
@@ -139,6 +153,7 @@ func interestsGroupParser(param string, agp *AccountGroupParam) error {
 		ids[-1] = struct{}{}
 	}
 	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntSetJoin(ids, ",")))
+	agp.interestContain = param
 	return nil
 }
 
@@ -154,6 +169,7 @@ func birthGroupParser(param string, agp *AccountGroupParam) error {
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("birth >= %d", from.Unix()))
 	agp.addWhere(fmt.Sprintf("birth < %d", after.Unix()))
+	agp.birthYear = birth
 
 	return nil
 }
@@ -161,6 +177,7 @@ func birthGroupParser(param string, agp *AccountGroupParam) error {
 func cityGroupParser(param string, agp *AccountGroupParam) error {
 	agp.addFrom("accounts")
 	agp.addWhere(fmt.Sprintf("city = \"%s\"", param))
+	agp.countryEq = param
 	return nil
 }
 
@@ -243,7 +260,13 @@ func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
 }
 
 func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err error) {
-	agp = &AccountGroupParam{map[string]struct{}{}, map[string]struct{}{}, bytes.Buffer{}, -1, 0}
+	agp = &AccountGroupParam{
+		keys:   map[string]struct{}{},
+		froms:  map[string]struct{}{},
+		wheres: bytes.Buffer{},
+		limit:  -1,
+		order:  0,
+	}
 
 	for field, param := range queryParams {
 		if param[0] == "" {

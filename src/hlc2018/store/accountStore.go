@@ -63,9 +63,8 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 	return nil
 }
 
-// [left, right)
-func (as *AccountStore) AvailableRange() (int, int) {
-	return 1, len(as.accounts)
+func (as *AccountStore) NewRangeAccountStoreSource() *RangeStoreSource {
+	return NewRangeStoreSource(len(as.accounts), 0, -1)
 }
 
 func (as *AccountStore) GetStoredAccount(id int) (*StoredAccount, error) {
