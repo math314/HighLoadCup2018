@@ -71,7 +71,7 @@ type Account struct {
 }
 
 type AccountContainer struct {
-	Accounts []Account
+	Accounts []*Account
 }
 
 type Interest struct {
@@ -386,6 +386,7 @@ func StringSetJoin(val map[string]struct{}, sep string) string {
 
 func IntIntMapJoin(val map[int]int, sep string) string {
 	bb := bytes.Buffer{}
+
 	for id, _ := range val {
 		if bb.Len() != 0 {
 			bb.WriteString(sep)
@@ -401,4 +402,23 @@ func AbsInt(x int) int {
 	} else {
 		return -x
 	}
+}
+
+func MapIntersect(l, r map[int]struct{}) map[int]struct{} {
+	if l == nil {
+		return r
+	} else if r == nil {
+		return l
+	}
+
+	if len(l) > len(r) {
+		l, r = r, l
+	}
+	ret := map[int]struct{}{}
+	for k, _ := range l {
+		if _, ok := r[k]; ok {
+			ret[k] = struct{}{}
+		}
+	}
+	return ret
 }

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type testRouter struct {
@@ -83,7 +84,13 @@ func RunTest() {
 
 			routed = true
 			args := &testRouterCallbackArgs{*testCase, matched}
+
+			before := time.Now().UnixNano()
 			route.fun(args)
+			after := time.Now().UnixNano()
+			elasped := after - before
+			log.Printf("%dms (%s)", elasped, testCase.url.String())
+
 		}
 		if !routed {
 			if testCase.status != http.StatusNotFound {

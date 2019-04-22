@@ -48,6 +48,15 @@ func (ls *LikeStore) InsertCommonLike(like *common.Like) {
 	ls.InsertLike(like.AccountIdFrom, like.AccountIdTo, like.Ts)
 }
 
+func (ls *LikeStore) CheckContainAllLikes(id int, liked []int) bool {
+	for _, l := range liked {
+		if _, ok := ls.forwardMap[id][l]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
 	minId := -1
 	minVal := len(ls.forward)

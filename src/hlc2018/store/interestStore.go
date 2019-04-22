@@ -41,19 +41,6 @@ func (is *InterestStore) InsertCommonInterest(interest *common.Interest) {
 	is.setInterests(interest.AccountId, interest.Interest)
 }
 
-func mapIntersect(l, r map[int]struct{}) map[int]struct{} {
-	if len(l) > len(r) {
-		l, r = r, l
-	}
-	ret := map[int]struct{}{}
-	for k, _ := range l {
-		if _, ok := r[k]; ok {
-			ret[k] = struct{}{}
-		}
-	}
-	return ret
-}
-
 func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} {
 	var mp map[int]struct{}
 	for _, s := range vs {
@@ -64,7 +51,7 @@ func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} 
 		if mp == nil {
 			mp = is.InterestsToId[interestId]
 		} else {
-			mp = mapIntersect(mp, is.InterestsToId[interestId])
+			mp = common.MapIntersect(mp, is.InterestsToId[interestId])
 		}
 	}
 	return mp
@@ -103,7 +90,7 @@ func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 		if !found {
 			continue
 		}
-		if _, ok := is.idToInterests[id][interestId]; !ok {
+		if _, ok := is.idToInterests[id][interestId]; ok {
 			return true
 		}
 	}

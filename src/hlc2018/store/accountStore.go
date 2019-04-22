@@ -63,6 +63,11 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 	return nil
 }
 
+// [left, right)
+func (as *AccountStore) AvailableRange() (int, int) {
+	return 1, len(as.accounts)
+}
+
 func (as *AccountStore) GetStoredAccount(id int) (*StoredAccount, error) {
 	if len(as.accounts) <= id {
 		return nil, fmt.Errorf("account not found")

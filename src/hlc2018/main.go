@@ -207,6 +207,10 @@ func httpMain() {
 	//e.POST("/accounts/:id/", accountsIdHandler)
 	//e.POST("/accounts/likes/", accountsLikesHandler)
 
+	e.Any("/*", func(context echo.Context) error {
+		return context.String(http.StatusNotFound, "")
+	})
+
 	e.Start(":" + port)
 }
 

@@ -28,13 +28,15 @@ func testAccountsFilter(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansAfa.Accounts) != len(afa.Accounts) {
-		log.Fatal("length mismatch")
+		log.Print("length mismatch")
+		handlers.AccountsFilterCore(args.url.Query())
 	}
 
 	for i := 0; i < len(ansAfa.Accounts); i++ {
 		r := afa.Accounts[i].ToRawAccount()
 		if !ansAfa.Accounts[i].Equal(r) {
-			log.Fatal("item mismatch")
+			log.Print("item mismatch")
+			handlers.AccountsFilterCore(args.url.Query())
 		}
 	}
 }
