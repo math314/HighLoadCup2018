@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo"
 	"hlc2018/common"
 	"hlc2018/globals"
+	"hlc2018/store"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,8 +16,12 @@ import (
 
 type AccountRecommendParam struct {
 	id     int
-	wheres bytes.Buffer
+	wheres bytes.Buffer // todo: delete
 	limit  int
+
+	// adding for recommend
+	city    string
+	country string
 }
 
 func (arp *AccountRecommendParam) addWhere(s string) {
@@ -51,6 +56,7 @@ func cityRecommendParser(param string, agp *AccountRecommendParam) error {
 	if param == "" {
 		return fmt.Errorf("city is empty")
 	}
+	agp.city = param
 	agp.addWhere(fmt.Sprintf("a.city = \"%s\"", param))
 	return nil
 }
@@ -59,6 +65,7 @@ func countryRecommendParser(param string, agp *AccountRecommendParam) error {
 	if param == "" {
 		return fmt.Errorf("country is empty")
 	}
+	agp.country = param
 	agp.addWhere(fmt.Sprintf("a.country = \"%s\"", param))
 	return nil
 }
@@ -77,7 +84,7 @@ var accountRecommendFuncs = map[string]AccountRecommendFunc{
 }
 
 func accountsRecommendParser(idStr string, queryParams url.Values) (arp *AccountRecommendParam, err error) {
-	arp = &AccountRecommendParam{-1, bytes.Buffer{}, -1}
+	arp = &AccountRecommendParam{-1, bytes.Buffer{}, -1, "", ""}
 	if err = idRecommendParser(idStr, arp); err != nil {
 		return
 	}
@@ -119,42 +126,46 @@ func AccountsRecommendCore(idStr string, queryParams url.Values) ([]*common.Acco
 		return nil, &HlcHttpError{http.StatusBadRequest, err}
 	}
 
-	var accounts []common.Account
-	if err := globals.DB.Select(&accounts, "SELECT id, birth, sex from accounts WHERE id = ?", arp.id); err != nil {
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
-	}
-	if len(accounts) != 1 {
+	account, err := globals.As.GetStoredAccount(arp.id)
+	if err != nil {
 		return nil, &HlcHttpError{http.StatusNotFound, err}
 	}
-	account := accounts[0]
 
 	interestsCounts := globals.Is.GetSuggestInterestIds(account.ID)
-	if len(interestsCounts) == 0 {
+	filteredInterestingsCounts := map[int]int{}
+	for k, v := range interestsCounts {
+		a := globals.As.GetStoredAccountWithoutError(k)
+		if k == account.ID {
+			continue
+		}
+		if a.Sex+account.Sex != 3 {
+			continue
+		}
+		if arp.country != "" {
+			if arp.country != a.Country {
+				continue
+			}
+		}
+		if arp.city != "" {
+			if arp.city != a.City {
+				continue
+			}
+		}
+		filteredInterestingsCounts[k] = v
+	}
+
+	if len(filteredInterestingsCounts) == 0 {
 		return nil, nil
 	}
-	oppositeSex := 3 - account.Sex
 
-	queryTemplate := `
-SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname, a.birth, a.premium_start, a.premium_end, a.premium_now, a.status
-FROM accounts as a
-WHERE
- a.sex = %d
- AND a.id != %d
- %s
- AND a.id in (%s)
-`
-	where := ""
-	if arp.wheres.Len() != 0 {
-		where = " AND " + arp.wheres.String()
+	type StoredAccountCount struct {
+		*store.StoredAccount
+		count int
 	}
-	query1 := fmt.Sprintf(queryTemplate,
-		oppositeSex, account.ID, where, common.IntIntMapJoin(interestsCounts, ","))
-	log.Printf("query := %s", query1)
 
-	var acs []*common.Account
-	if err := globals.DB.Select(&acs, query1); err != nil {
-		log.Print(err)
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
+	var acs []StoredAccountCount
+	for id, cnt := range filteredInterestingsCounts {
+		acs = append(acs, StoredAccountCount{globals.As.GetStoredAccountWithoutError(id), cnt})
 	}
 
 	sort.Slice(acs, func(i, j int) bool {
@@ -187,7 +198,21 @@ WHERE
 		retLen = len(acs)
 	}
 
-	return acs[:retLen], nil
+	var converted []*common.Account
+	for i := 0; i < retLen; i++ {
+		converted = append(converted, &common.Account{
+			ID:            acs[i].ID,
+			Email:         acs[i].Email,
+			Status:        acs[i].Status,
+			Fname:         acs[i].Fname,
+			Sname:         acs[i].Sname,
+			Birth:         acs[i].Birth,
+			Premium_start: acs[i].Premium_start,
+			Premium_end:   acs[i].Premium_end,
+		})
+	}
+
+	return converted, nil
 }
 
 func AccountsRecommendHandler(c echo.Context) error {

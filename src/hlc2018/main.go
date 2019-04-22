@@ -278,6 +278,10 @@ func mysqlDataLoader(loadToMySQL, loadToMemory bool) {
 		}
 
 		if loadToMemory {
+			for _, i := range accounts {
+				globals.As.InsertAccountCommon(i)
+			}
+
 			for _, i := range interests {
 				globals.Is.InsertCommonInterest(i)
 			}

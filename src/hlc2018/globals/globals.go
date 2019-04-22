@@ -13,6 +13,7 @@ var (
 	DB *sqlx.DB
 	Ls = store.NewLikeStore()
 	Is = store.NewInterestStore()
+	As = store.NewAccountStore()
 )
 
 func init() {

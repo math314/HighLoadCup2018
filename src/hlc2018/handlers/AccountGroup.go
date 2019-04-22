@@ -134,9 +134,11 @@ func limitGroupParser(param string, agp *AccountGroupParam) error {
 
 func interestsGroupParser(param string, agp *AccountGroupParam) error {
 	agp.addFrom("accounts")
-	agp.addFrom("interests")
-	agp.addWhere("a.id = i.account_id")
-	agp.addWhere(fmt.Sprintf("interest = \"%s\"", param))
+	ids := globals.Is.ContainsAnyFromInterests([]string{param})
+	if len(ids) == 0 {
+		ids[-1] = struct{}{}
+	}
+	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntSetJoin(ids, ",")))
 	return nil
 }
 
@@ -272,6 +274,9 @@ func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err er
 	if len(agp.keys) == 0 {
 		err = fmt.Errorf("keys is not specified")
 		return
+	}
+	if len(agp.keys) > 2 {
+		log.Printf("keys length = %d : %s", len(agp.keys), common.StringSetJoin(agp.keys, ","))
 	}
 
 	return

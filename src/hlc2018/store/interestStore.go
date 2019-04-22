@@ -5,14 +5,13 @@ import (
 )
 
 type InterestStore struct {
-	interestToInt map[string]int
-	intToInterest []string
-	idToInterests []map[int]struct{}
-	InterestsToId []map[int]struct{}
+	interestMapper StringIdMapper
+	idToInterests  []map[int]struct{}
+	InterestsToId  []map[int]struct{}
 }
 
 func NewInterestStore() *InterestStore {
-	is := &InterestStore{map[string]int{}, nil, nil, nil}
+	is := &InterestStore{StringIdMapper{map[string]int{}, nil}, nil, nil}
 	is.insertInterestIfNeeded("")
 	return is
 }
@@ -24,15 +23,11 @@ func (is *InterestStore) ExtendSizeIfNeeded(nextSize int) {
 }
 
 func (is *InterestStore) insertInterestIfNeeded(s string) int {
-	val, ok := is.interestToInt[s]
-	if ok {
-		return val
+	val, added := is.interestMapper.insertStringIfNeeded(s)
+	if added {
+		is.InterestsToId = append(is.InterestsToId, map[int]struct{}{})
 	}
-	newVal := len(is.interestToInt)
-	is.interestToInt[s] = newVal
-	is.intToInterest = append(is.intToInterest, s)
-	is.InterestsToId = append(is.InterestsToId, map[int]struct{}{})
-	return newVal
+	return val
 }
 
 func (is *InterestStore) setInterests(id int, s string) {
@@ -62,7 +57,7 @@ func mapIntersect(l, r map[int]struct{}) map[int]struct{} {
 func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} {
 	var mp map[int]struct{}
 	for _, s := range vs {
-		interestId, found := is.interestToInt[s]
+		interestId, found := is.interestMapper.get(s)
 		if !found {
 			return map[int]struct{}{}
 		}
@@ -78,7 +73,7 @@ func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} 
 func (is *InterestStore) ContainsAnyFromInterests(vs []string) map[int]struct{} {
 	mp := map[int]struct{}{}
 	for _, s := range vs {
-		interestId, found := is.interestToInt[s]
+		interestId, found := is.interestMapper.get(s)
 		if !found {
 			continue
 		}
@@ -91,7 +86,7 @@ func (is *InterestStore) ContainsAnyFromInterests(vs []string) map[int]struct{} 
 
 func (is *InterestStore) ContainsAll(id int, vs []string) bool {
 	for _, s := range vs {
-		interestId, found := is.interestToInt[s]
+		interestId, found := is.interestMapper.get(s)
 		if !found {
 			return false
 		}
@@ -104,7 +99,7 @@ func (is *InterestStore) ContainsAll(id int, vs []string) bool {
 
 func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 	for _, s := range vs {
-		interestId, found := is.interestToInt[s]
+		interestId, found := is.interestMapper.get(s)
 		if !found {
 			continue
 		}
@@ -118,7 +113,7 @@ func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 func (is *InterestStore) GetCommonInterests(id int) []*common.Interest {
 	var ret []*common.Interest
 	for interestId, _ := range is.idToInterests[id] {
-		ret = append(ret, &common.Interest{id, is.intToInterest[interestId]})
+		ret = append(ret, &common.Interest{id, is.interestMapper.strings[interestId]})
 	}
 	return ret
 }

@@ -17,14 +17,10 @@ func AccountsSuggestCore(idStr string, queryParams url.Values) ([]*common.Accoun
 		return nil, &HlcHttpError{http.StatusBadRequest, err}
 	}
 
-	var accounts []common.Account
-	if err := globals.DB.Select(&accounts, "SELECT id, sex from accounts WHERE id = ?", arp.id); err != nil {
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
-	}
-	if len(accounts) != 1 {
+	account, err := globals.As.GetStoredAccount(arp.id)
+	if err != nil {
 		return nil, &HlcHttpError{http.StatusNotFound, err}
 	}
-	account := accounts[0]
 
 	orderedLiker := globals.Ls.OrderByLikeSimilarity(account.ID)
 	if len(orderedLiker) == 0 {

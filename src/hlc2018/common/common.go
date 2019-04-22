@@ -42,7 +42,7 @@ type RawAccountsContainer struct {
 }
 
 type JoinedYear struct {
-	int8
+	Int8 int8
 }
 
 func ToJoinedYear(year int) JoinedYear {
@@ -50,7 +50,7 @@ func ToJoinedYear(year int) JoinedYear {
 }
 
 func (j JoinedYear) ToYear() int {
-	return int(j.int8) + 2000
+	return int(j.Int8) + 2000
 }
 
 type Account struct {
@@ -67,7 +67,7 @@ type Account struct {
 	Birth         int        `db:"birth"`
 	City          string     `db:"city"`
 	Country       string     `db:"country"`
-	joinedYear    JoinedYear `db:"joined_year"`
+	JoinedYear    JoinedYear `db:"joined_year"`
 }
 
 type AccountContainer struct {
@@ -137,7 +137,7 @@ func (rawAccount *RawAccount) ToAccount() *Account {
 	a.Birth = rawAccount.Birth
 	a.City = rawAccount.City
 	a.Country = rawAccount.Country
-	a.joinedYear = ToJoinedYear(time.Unix(int64(rawAccount.Joined), 0).Year())
+	a.JoinedYear = ToJoinedYear(time.Unix(int64(rawAccount.Joined), 0).Year())
 
 	return &a
 }
@@ -286,7 +286,7 @@ func (a *Account) Oneline() string {
 	olb.appendInt(a.Birth)
 	olb.appendString(a.Country)
 	olb.appendString(a.City)
-	olb.appendInt(int(a.joinedYear.int8))
+	olb.appendInt(int(a.JoinedYear.Int8))
 	olb.appendInt(int(a.Status))
 	olb.appendInt(a.Premium_start)
 	olb.appendInt(a.Premium_end)
@@ -308,7 +308,7 @@ func (a *Account) InsertArgs() []interface{} {
 		a.Birth,
 		a.Country,
 		a.City,
-		int(a.joinedYear.int8),
+		int(a.JoinedYear.Int8),
 		int(a.Status),
 		a.Premium_start,
 		a.Premium_end,
@@ -369,6 +369,17 @@ func IntSetJoin(val map[int]struct{}, sep string) string {
 			bb.WriteString(sep)
 		}
 		bb.WriteString(strconv.Itoa(id))
+	}
+	return bb.String()
+}
+
+func StringSetJoin(val map[string]struct{}, sep string) string {
+	bb := bytes.Buffer{}
+	for id, _ := range val {
+		if bb.Len() != 0 {
+			bb.WriteString(sep)
+		}
+		bb.WriteString(id)
 	}
 	return bb.String()
 }
