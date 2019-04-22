@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"github.com/labstack/echo"
 	"hlc2018/common"
 	"hlc2018/globals"
@@ -27,61 +26,49 @@ func AccountsSuggestCore(idStr string, queryParams url.Values) ([]*common.Accoun
 		return nil, nil
 	}
 
-	wheres := ""
-	if arp.wheres.Len() != 0 {
-		wheres = " AND " + arp.wheres.String()
+	var filteredOrderedLiker []int
+	for _, id := range orderedLiker {
+		a := globals.As.GetStoredAccountWithoutError(id)
+		if a.Sex != account.Sex {
+			continue
+		}
+		if arp.country != "" {
+			if arp.country != a.Country {
+				continue
+			}
+		}
+		if arp.city != "" {
+			if arp.city != a.City {
+				continue
+			}
+		}
+
+		filteredOrderedLiker = append(filteredOrderedLiker, id)
 	}
 
-	queryTemplate := `SELECT id FROM accounts as a WHERE sex = %d AND a.id in (%s) %s`
-	query := fmt.Sprintf(queryTemplate, account.Sex, common.IntArrayJoin(orderedLiker, ","), wheres)
-	log.Print(query)
-
-	var filteredIds []int
-	if err := globals.DB.Select(&filteredIds, query); err != nil {
-		log.Print(err)
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
-	}
-	if len(filteredIds) == 0 {
+	if len(filteredOrderedLiker) == 0 {
 		return nil, nil
 	}
 
-	filteredIdsMap := map[int]struct{}{}
-	for _, a := range filteredIds {
-		filteredIdsMap[a] = struct{}{}
-	}
 	orderedRetIds := []int{}
 	retIds := map[int]struct{}{}
-	for _, id := range orderedLiker {
-		if _, ok := filteredIdsMap[id]; !ok {
-			continue
-		}
-
+	for _, id := range filteredOrderedLiker {
 		globals.Ls.GetNotLiked(account.ID, id, &retIds, &orderedRetIds, arp.limit)
 		if len(retIds) == arp.limit {
 			break
 		}
 	}
 
-	query2 := fmt.Sprintf(`
-SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname
-FROM accounts AS a
-WHERE a.id in (%s)
-`, common.IntArrayJoin(orderedRetIds, ","))
-
-	var retAcocuntInfo []*common.Account
-	if err := globals.DB.Select(&retAcocuntInfo, query2); err != nil {
-		log.Print(err)
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
-	}
-
-	accountMap := map[int]*common.Account{}
-	for _, a := range retAcocuntInfo {
-		accountMap[a.ID] = a
-	}
-
 	var ret []*common.Account
 	for _, id := range orderedRetIds {
-		ret = append(ret, accountMap[id])
+		a := globals.As.GetStoredAccountWithoutError(id)
+		ret = append(ret, &common.Account{
+			ID:     a.ID,
+			Email:  a.Email,
+			Status: a.Status,
+			Fname:  a.Fname,
+			Sname:  a.Sname,
+		})
 	}
 
 	return ret, nil
