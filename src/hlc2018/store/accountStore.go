@@ -3,7 +3,38 @@ package store
 import (
 	"fmt"
 	"hlc2018/common"
+	"strconv"
 )
+
+type CompressedPhone struct {
+	Int int
+}
+
+func CompressedPhoneFromString(phone string) (CompressedPhone, error) {
+	if phone == "" {
+		return CompressedPhone{0}, nil
+	}
+	use := phone[3:5] + phone[6:]
+	ret, err := strconv.Atoi(use)
+	return CompressedPhone{ret}, err
+}
+
+const K_PHONE = 10000000
+
+func (cp CompressedPhone) String() string {
+	if cp.Int == 0 {
+		return ""
+	}
+	return fmt.Sprintf("8(9%02d)%07d", cp.Int/K_PHONE, cp.Int%K_PHONE)
+}
+
+func (cp CompressedPhone) HasPhoneCode(code int) bool {
+	if cp.Int == 0 {
+		return false
+	}
+	cpCode := 900 + cp.Int/K_PHONE
+	return cpCode == code
+}
 
 type StoredAccount struct {
 	ID            int
@@ -15,7 +46,7 @@ type StoredAccount struct {
 	Premium_now   bool
 	Status        int8
 	Sex           int8
-	Phone         string
+	Phone         CompressedPhone
 	Birth         int
 	City          string
 	Country       string
@@ -42,6 +73,11 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 		return fmt.Errorf("failed to add a new account : %d is already used", a.ID)
 	}
 
+	cp, err := CompressedPhoneFromString(a.Phone)
+	if err != nil {
+		return err
+	}
+
 	nw := &StoredAccount{
 		ID:            a.ID,
 		Fname:         a.Fname,
@@ -52,7 +88,7 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 		Premium_now:   a.Premium_now,
 		Status:        a.Status,
 		Sex:           a.Sex,
-		Phone:         a.Phone,
+		Phone:         cp,
 		Birth:         a.Birth,
 		City:          a.City,
 		Country:       a.Country,

@@ -38,7 +38,7 @@ type AccountsFilterParams struct {
 	snameEq           string
 	snameStarts       string
 	snameNull         Tribool
-	phoneCode         string
+	phoneCode         int
 	phoneNull         Tribool
 	countryEq         string
 	countryNull       Tribool
@@ -130,8 +130,9 @@ func phoneCodeFilter(param string, afp *AccountsFilterParams) error {
 		}
 	}
 	afp.addSelect("phone")
-	afp.phoneCode = param
-	return nil
+	var err error
+	afp.phoneCode, err = strconv.Atoi(param)
+	return err
 }
 
 func cityAnyFilter(param string, afp *AccountsFilterParams) error {
@@ -525,19 +526,21 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 			}
 		}
 
-		if afp.phoneCode != "" {
-			if me.Phone == "" {
-				return false
-			}
-			if me.Phone[2:5] != afp.phoneCode {
+		if afp.phoneCode != 0 {
+			if !me.Phone.HasPhoneCode(afp.phoneCode) {
 				return false
 			}
 		}
 
 		if afp.phoneNull != TUndefined {
-			ok := IsNullStoreFilter(me.Phone, afp.phoneNull)
-			if !ok {
-				return false
+			if afp.phoneNull == TTrue {
+				if me.Phone.Int != 0 {
+					return false
+				}
+			} else {
+				if me.Phone.Int == 0 {
+					return false
+				}
 			}
 		}
 
@@ -730,7 +733,7 @@ func AccountsFilterCore(queryParams url.Values) (*common.AccountContainer, *HlcH
 			r.Sname = a.Sname
 		}
 		if _, found := afp.selects["phone"]; found {
-			r.Phone = a.Phone
+			r.Phone = a.Phone.String()
 		}
 		if _, found := afp.selects["city"]; found {
 			r.City = a.City
