@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type RawPremium struct {
@@ -40,22 +41,33 @@ type RawAccountsContainer struct {
 	Accounts []*RawAccount `json:"accounts"`
 }
 
+type JoinedYear struct {
+	int8
+}
+
+func ToJoinedYear(year int) JoinedYear {
+	return JoinedYear{int8(year - 2000)}
+}
+
+func (j JoinedYear) ToYear() int {
+	return int(j.int8) + 2000
+}
+
 type Account struct {
-	ID                 int    `db:"id"`
-	Fname              string `db:"fname"`
-	Sname              string `db:"sname"`
-	Email              string `db:"email"`
-	Status             int8   `db:"status"`
-	StatusForRecommend int8   `db:"status_for_recommend"`
-	Premium_start      int    `db:"premium_start"`
-	Premium_end        int    `db:"premium_end"`
-	Premium_now        bool   `db:"premium_now"`
-	Sex                int8   `db:"sex"`
-	Phone              string `db:"phone"`
-	Birth              int    `db:"birth"`
-	City               string `db:"city"`
-	Country            string `db:"country"`
-	Joined             int    `db:"joined"`
+	ID            int        `db:"id"`
+	Fname         string     `db:"fname"`
+	Sname         string     `db:"sname"`
+	Email         string     `db:"email"`
+	Status        int8       `db:"status"`
+	Premium_start int        `db:"premium_start"`
+	Premium_end   int        `db:"premium_end"`
+	Premium_now   bool       `db:"premium_now"`
+	Sex           int8       `db:"sex"`
+	Phone         string     `db:"phone"`
+	Birth         int        `db:"birth"`
+	City          string     `db:"city"`
+	Country       string     `db:"country"`
+	joinedYear    JoinedYear `db:"joined_year"`
 }
 
 type AccountContainer struct {
@@ -114,8 +126,6 @@ func (rawAccount *RawAccount) ToAccount() *Account {
 	a.Sname = rawAccount.Sname
 	a.Email = rawAccount.Email
 	a.Status = StatusFromString(rawAccount.Status)
-	recMap := map[int8]int8{1: 2, 2: 1, 3: 3}
-	a.StatusForRecommend = recMap[a.Status]
 
 	if rawAccount.Premium != nil {
 		a.Premium_start = rawAccount.Premium.Start
@@ -127,7 +137,7 @@ func (rawAccount *RawAccount) ToAccount() *Account {
 	a.Birth = rawAccount.Birth
 	a.City = rawAccount.City
 	a.Country = rawAccount.Country
-	a.Joined = rawAccount.Joined
+	a.joinedYear = ToJoinedYear(time.Unix(int64(rawAccount.Joined), 0).Year())
 
 	return &a
 }
@@ -221,7 +231,7 @@ func (a *Account) ToRawAccount() *RawAccount {
 	r.Birth = a.Birth
 	r.City = a.City
 	r.Country = a.Country
-	r.Joined = a.Joined
+	r.Joined = 0 // No end-points refer this
 
 	return &r
 }
@@ -276,9 +286,8 @@ func (a *Account) Oneline() string {
 	olb.appendInt(a.Birth)
 	olb.appendString(a.Country)
 	olb.appendString(a.City)
-	olb.appendInt(a.Joined)
+	olb.appendInt(int(a.joinedYear.int8))
 	olb.appendInt(int(a.Status))
-	olb.appendInt(int(a.StatusForRecommend))
 	olb.appendInt(a.Premium_start)
 	olb.appendInt(a.Premium_end)
 	intPremiumNow := 0
@@ -299,9 +308,8 @@ func (a *Account) InsertArgs() []interface{} {
 		a.Birth,
 		a.Country,
 		a.City,
-		a.Joined,
+		int(a.joinedYear.int8),
 		int(a.Status),
-		int(a.StatusForRecommend),
 		a.Premium_start,
 		a.Premium_end,
 		a.Premium_now,
@@ -354,7 +362,7 @@ func IntArrayJoin(val []int, sep string) string {
 	return bb.String()
 }
 
-func IntMapJoin(val map[int]struct{}, sep string) string {
+func IntSetJoin(val map[int]struct{}, sep string) string {
 	bb := bytes.Buffer{}
 	for id, _ := range val {
 		if bb.Len() != 0 {
@@ -363,4 +371,23 @@ func IntMapJoin(val map[int]struct{}, sep string) string {
 		bb.WriteString(strconv.Itoa(id))
 	}
 	return bb.String()
+}
+
+func IntIntMapJoin(val map[int]int, sep string) string {
+	bb := bytes.Buffer{}
+	for id, _ := range val {
+		if bb.Len() != 0 {
+			bb.WriteString(sep)
+		}
+		bb.WriteString(strconv.Itoa(id))
+	}
+	return bb.String()
+}
+
+func AbsInt(x int) int {
+	if x >= 0 {
+		return x
+	} else {
+		return -x
+	}
 }

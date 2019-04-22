@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 )
 
@@ -127,51 +128,27 @@ func AccountsRecommendCore(idStr string, queryParams url.Values) ([]*common.Acco
 	}
 	account := accounts[0]
 
-	interests := globals.Is.GetCommonInterests(account.ID)
-	if len(interests) == 0 {
+	interestsCounts := globals.Is.GetSuggestInterestIds(account.ID)
+	if len(interestsCounts) == 0 {
 		return nil, nil
 	}
-
-	joinedInterests := bytes.Buffer{}
-	for _, i := range interests {
-		if joinedInterests.Len() != 0 {
-			joinedInterests.WriteString(", ")
-		}
-		joinedInterests.WriteString("\"")
-		joinedInterests.WriteString(i.Interest)
-		joinedInterests.WriteString("\"")
-	}
-
 	oppositeSex := 3 - account.Sex
 
 	queryTemplate := `
-SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname, a.birth, a.premium_start, a.premium_end
-FROM accounts as a, (
- SELECT account_id, COUNT(account_id) AS ` + "`count`" + `
- FROM interests
- WHERE interest in (%s)
- GROUP BY account_id
- ) as b
+SELECT a.id, a.email, a.status, IFNULL(a.fname, "") AS fname, IFNULL(a.sname, "") AS sname, a.birth, a.premium_start, a.premium_end, a.premium_now, a.status
+FROM accounts as a
 WHERE
  a.sex = %d
  AND a.id != %d
- AND %s
- AND a.id = b.account_id
-ORDER BY
-a.premium_now DESC
-, a.status_for_recommend DESC
-, b.count DESC
-, abs(a.birth - %d) ASC
-LIMIT %d
+ %s
+ AND a.id in (%s)
 `
-	wheres1 := arp.wheres
-	if wheres1.Len() != 0 {
-		wheres1.WriteString(" AND ")
+	where := ""
+	if arp.wheres.Len() != 0 {
+		where = " AND " + arp.wheres.String()
 	}
-	wheres1.WriteString("b.count != 0")
-
 	query1 := fmt.Sprintf(queryTemplate,
-		joinedInterests.String(), oppositeSex, account.ID, wheres1.String(), account.Birth, arp.limit)
+		oppositeSex, account.ID, where, common.IntIntMapJoin(interestsCounts, ","))
 	log.Printf("query := %s", query1)
 
 	var acs []*common.Account
@@ -179,7 +156,38 @@ LIMIT %d
 		log.Print(err)
 		return nil, &HlcHttpError{http.StatusInternalServerError, err}
 	}
-	return acs, nil
+
+	sort.Slice(acs, func(i, j int) bool {
+		if acs[i].Premium_now != acs[j].Premium_now {
+			return acs[i].Premium_now
+		}
+		c, d := acs[i].Status, acs[j].Status
+		if c != d {
+			if c == 3 {
+				return true
+			} else if d == 3 {
+				return false
+			} else {
+				//2,1 or 1,2
+				return c == 1
+			}
+		}
+		x := interestsCounts[acs[i].ID]
+		y := interestsCounts[acs[j].ID]
+		if x != y {
+			return x > y
+		}
+		a := common.AbsInt(account.Birth - acs[i].Birth)
+		b := common.AbsInt(account.Birth - acs[j].Birth)
+		return a < b
+	})
+
+	retLen := arp.limit
+	if retLen > len(acs) {
+		retLen = len(acs)
+	}
+
+	return acs[:retLen], nil
 }
 
 func AccountsRecommendHandler(c echo.Context) error {

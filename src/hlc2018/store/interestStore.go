@@ -1,6 +1,8 @@
 package store
 
-import "hlc2018/common"
+import (
+	"hlc2018/common"
+)
 
 type InterestStore struct {
 	interestToInt map[string]int
@@ -119,4 +121,15 @@ func (is *InterestStore) GetCommonInterests(id int) []*common.Interest {
 		ret = append(ret, &common.Interest{id, is.intToInterest[interestId]})
 	}
 	return ret
+}
+
+func (is *InterestStore) GetSuggestInterestIds(id int) map[int]int {
+	mp := map[int]int{}
+	for interestId, _ := range is.idToInterests[id] {
+		for k, _ := range is.InterestsToId[interestId] {
+			mp[k]++
+		}
+	}
+
+	return mp
 }

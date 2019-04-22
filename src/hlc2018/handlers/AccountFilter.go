@@ -200,7 +200,7 @@ func interestsAnyFilter(param string, sb *AccountsFilterParams) error {
 	if len(ids) == 0 {
 		ids[-1] = struct{}{}
 	}
-	sb.addWhere(fmt.Sprintf("id in (%s)", common.IntMapJoin(ids, ",")))
+	sb.addWhere(fmt.Sprintf("id in (%s)", common.IntSetJoin(ids, ",")))
 	return nil
 }
 
@@ -211,7 +211,7 @@ func interestsContainsFilter(param string, sb *AccountsFilterParams) error {
 	if len(ids) == 0 {
 		ids[-1] = struct{}{}
 	}
-	sb.addWhere(fmt.Sprintf("id in (%s)", common.IntMapJoin(ids, ",")))
+	sb.addWhere(fmt.Sprintf("id in (%s)", common.IntSetJoin(ids, ",")))
 	return nil
 }
 

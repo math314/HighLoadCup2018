@@ -37,7 +37,6 @@ var testRouters = []testRouter{
 }
 
 func LoadGetPhase(fileName string) []*testCase {
-	//fp, err := os.Open("./testdata/answers/phase_1_get.answ")
 	fp, err := os.Open(fileName)
 	if err != nil {
 		log.Fatal(err)

@@ -92,12 +92,8 @@ func joinedGroupParser(param string, agp *AccountGroupParam) error {
 		return fmt.Errorf("failed to parse joined (%s)", param)
 	}
 
-	from := time.Date(joined, 1, 1, 0, 0, 0, 0, time.UTC)
-	after := time.Date(joined+1, 1, 1, 0, 0, 0, 0, time.UTC)
-
 	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.joined >= %d", from.Unix()))
-	agp.addWhere(fmt.Sprintf("a.joined < %d", after.Unix()))
+	agp.addWhere(fmt.Sprintf("a.joined_year = %d", joined-2000))
 
 	return nil
 }
