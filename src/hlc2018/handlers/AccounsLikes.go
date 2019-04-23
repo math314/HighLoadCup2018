@@ -52,7 +52,7 @@ func AccountsLikesHandler(c echo.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = AccountsInsertHandlerCore(body)
+	err = AccountsLikesHandlerCore(body)
 	if err != nil {
 		log.Print(err)
 		return c.String(http.StatusBadRequest, "")
