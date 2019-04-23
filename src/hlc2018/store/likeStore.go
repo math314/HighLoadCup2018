@@ -57,13 +57,13 @@ func (ls *LikeStore) CheckContainAllLikes(id int, liked []int) bool {
 	return true
 }
 
-func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
+func (ls *LikeStore) IdsContainAllLikes(ids []int) map[int]struct{} {
 	minId := -1
 	minVal := len(ls.forward)
 
 	for _, id := range ids {
 		if len(ls.backward) <= id {
-			return []int{}
+			return map[int]struct{}{}
 		}
 		if minVal > len(ls.backward[id]) {
 			minId = id
@@ -71,7 +71,7 @@ func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
 		}
 	}
 
-	ret := make([]int, 0, minVal)
+	ret := make(map[int]struct{}, minVal)
 	for _, k := range ls.backward[minId] {
 		ok := true
 		for _, id := range ids {
@@ -81,7 +81,7 @@ func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
 			}
 		}
 		if ok {
-			ret = append(ret, k.to)
+			ret[k.to] = struct{}{}
 		}
 	}
 
@@ -184,12 +184,4 @@ func (ls *LikeStore) GetNotLiked(id, othersId int, mp *map[int]struct{}, ret *[]
 			return
 		}
 	}
-}
-
-func (ls *LikeStore) AlreadyLiked(id int) []int {
-	var ret []int
-	for to, _ := range ls.forward[id] {
-		ret = append(ret, to)
-	}
-	return ret
 }

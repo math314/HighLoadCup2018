@@ -226,10 +226,15 @@ func SplitGroupParamsIntoStoreAndFilter(originalAgp *AccountGroupParam) (*Accoun
 	agp := *originalAgp
 	//?
 	if agp.likeContain != 0 {
-		liker := globals.Ls.IdsContainAllLikes([]int{agp.likeContain})
+		mp := globals.Ls.IdsContainAllLikes([]int{agp.likeContain})
+
+		var ids []int
+		for id, _ := range mp {
+			ids = append(ids, id)
+		}
 
 		agp.likeContain = 0
-		return &agp, store.NewArrayStoreSource(liker)
+		return &agp, store.NewArrayStoreSource(ids)
 	}
 
 	// 1/30 if length == 1

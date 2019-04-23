@@ -80,9 +80,9 @@ type Interest struct {
 }
 
 type Like struct {
-	AccountIdFrom int
-	AccountIdTo   int
-	Ts            int
+	AccountIdFrom int `db:"f"`
+	AccountIdTo   int `db:"t"`
+	Ts            int `db:"ts"`
 }
 
 func SliceIndex(s []string, val string) int {

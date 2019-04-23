@@ -241,11 +241,6 @@ func likesContainsFilter(param string, afp *AccountsFilterParams) error {
 		liked = append(liked, id)
 	}
 
-	liker := globals.Ls.IdsContainAllLikes(liked)
-	if len(liker) == 0 {
-		liker = []int{-1}
-	}
-
 	afp.likeContains = liked
 	return nil
 }
@@ -625,11 +620,16 @@ func SplitFilterParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Ac
 	afp := *originalAfp
 	//?
 	if len(afp.likeContains) > 0 {
-		liker := globals.Ls.IdsContainAllLikes(afp.likeContains)
-		sort.Sort(sort.Reverse(sort.IntSlice(liker)))
+		mp := globals.Ls.IdsContainAllLikes(afp.likeContains)
+
+		var ids []int
+		for id, _ := range mp {
+			ids = append(ids, id)
+		}
+		sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 
 		afp.likeContains = nil
-		return &afp, store.NewArrayStoreSource(liker)
+		return &afp, store.NewArrayStoreSource(ids)
 	}
 
 	// 1/30 if length == 1
