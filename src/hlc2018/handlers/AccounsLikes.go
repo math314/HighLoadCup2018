@@ -34,7 +34,12 @@ func AccountsLikesHandlerCore(j []byte) error {
 
 	likes := rlc.ToLikes()
 	for _, i := range likes {
-		if err := globals.Ls.InsertCommonLike(i); err != nil {
+		if err := globals.Ls.IsValidCommonLike(i); err != nil {
+			return err
+		}
+	}
+	for _, i := range likes {
+		if err := globals.Ls.InsertCommonLikeWithoutRangeCheck(i); err != nil {
 			return err
 		}
 	}

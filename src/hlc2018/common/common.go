@@ -46,11 +46,19 @@ type JoinedYear struct {
 }
 
 func ToJoinedYear(year int) JoinedYear {
-	return JoinedYear{int8(year - 2000)}
+	val := int8(year - 2000)
+	if val < 0 {
+		val = 0
+	}
+	return JoinedYear{val}
 }
 
 func (j JoinedYear) ToYear() int {
-	return int(j.Int8) + 2000
+	if j.Int8 == 0 {
+		return 1970
+	} else {
+		return int(j.Int8) + 2000
+	}
 }
 
 type Account struct {

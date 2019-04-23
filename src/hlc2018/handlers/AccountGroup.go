@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/labstack/echo"
 	"hlc2018/common"
@@ -175,8 +174,8 @@ type GroupResponse struct {
 	Sex       int8
 	Status    int8
 	Interests string
-	Country   sql.NullString
-	City      sql.NullString
+	Country   string
+	City      string
 }
 
 type GroupResponseCount struct {
@@ -193,8 +192,8 @@ func (gr *GroupResponseCount) ToRawGroupResponse() *RawGroupResponse {
 		r.Status = common.STATUSES[gr.Status-1]
 	}
 	r.Interests = gr.Interests
-	r.Country = gr.Country.String
-	r.City = gr.City.String
+	r.Country = gr.Country
+	r.City = gr.City
 	r.Count = gr.Count
 	return &r
 }
@@ -334,9 +333,9 @@ func grouping(ids []int, agp *AccountGroupParam) []GroupResponseCount {
 		for key, _ := range agp.keys {
 			switch key {
 			case "country":
-				gr.Country = sql.NullString{globals.As.IdToCountry(a.Country), true}
+				gr.Country = globals.As.IdToCountry(a.Country)
 			case "city":
-				gr.City = sql.NullString{globals.As.IdToCity(a.City), true}
+				gr.City = globals.As.IdToCity(a.City)
 			case "sex":
 				gr.Sex = a.Sex
 			case "status":
@@ -369,10 +368,10 @@ func sorting(grc []GroupResponseCount, agp *AccountGroupParam) {
 			return grc[i].Count < grc[j].Count
 		}
 		if grc[i].Country != grc[j].Country {
-			return grc[i].Country.String < grc[j].Country.String
+			return grc[i].Country < grc[j].Country
 		}
 		if grc[i].City != grc[j].City {
-			return grc[i].City.String < grc[j].City.String
+			return grc[i].City < grc[j].City
 		}
 		if grc[i].Interests != grc[j].Interests {
 			return grc[i].Interests < grc[j].Interests

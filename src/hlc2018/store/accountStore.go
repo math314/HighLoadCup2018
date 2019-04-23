@@ -201,7 +201,7 @@ func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
 		as.countryIndex.DeleteStringsFromPk(me.ID)
 		me.Country = as.countryIndex.SetString(me.ID, a.Country)
 	}
-	if a.JoinedYear.Int8 != 0 {
+	if a.JoinedYear.Int8 > 0 {
 		me.JoinedYear = a.JoinedYear
 	}
 

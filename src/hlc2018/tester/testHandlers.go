@@ -28,14 +28,14 @@ func testAccountsFilter(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansAfa.Accounts) != len(afa.Accounts) {
-		log.Print("length mismatch")
+		log.Fatal("length mismatch")
 		handlers.AccountsFilterCore(args.url.Query())
 	}
 
 	for i := 0; i < len(ansAfa.Accounts); i++ {
 		r := afa.Accounts[i].ToRawAccount()
 		if !ansAfa.Accounts[i].Equal(r) {
-			log.Print("item mismatch")
+			log.Fatal("item mismatch")
 			handlers.AccountsFilterCore(args.url.Query())
 		}
 	}
@@ -62,14 +62,16 @@ func testAccountsGroup(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansGr.Groups) != len(_gr) {
-		log.Print("length mismatch")
+		log.Fatal("length mismatch")
+		handlers.AccountsGroupCore(args.url.Query())
 		return
 	}
 
 	for i := 0; i < len(ansGr.Groups); i++ {
 		r := _gr[i].ToRawGroupResponse()
 		if !ansGr.Groups[i].Equal(r) {
-			log.Print("item mismatch")
+			log.Fatal("item mismatch")
+			handlers.AccountsGroupCore(args.url.Query())
 			return
 		}
 	}
@@ -96,7 +98,7 @@ func testAccountsRecommend(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansAfa.Accounts) != len(afa) {
-		log.Print("length mismatch")
+		log.Fatal("length mismatch")
 		handlers.AccountsRecommendCore(args.matched[1], args.url.Query())
 		return
 	}
@@ -104,7 +106,7 @@ func testAccountsRecommend(args *testRouterCallbackArgs) {
 	for i := 0; i < len(ansAfa.Accounts); i++ {
 		r := afa[i].ToRawAccount()
 		if !ansAfa.Accounts[i].Equal(r) {
-			log.Print("item mismatch")
+			log.Fatal("item mismatch")
 			handlers.AccountsRecommendCore(args.matched[1], args.url.Query())
 		}
 	}
@@ -131,14 +133,14 @@ func testAccountsSuggest(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansAfa.Accounts) != len(afa) {
-		log.Print("length mismatch")
+		log.Fatal("length mismatch")
 		return
 	}
 
 	for i := 0; i < len(ansAfa.Accounts); i++ {
 		r := afa[i].ToRawAccount()
 		if !ansAfa.Accounts[i].Equal(r) {
-			log.Print("item mismatch")
+			log.Fatal("item mismatch")
 			return
 		}
 	}
@@ -148,12 +150,12 @@ func testAccountsInsert(args *testRouterCallbackArgs) {
 	err := handlers.AccountsInsertHandlerCore([]byte(args.json))
 	if err != nil {
 		if args.status != 400 {
-			log.Print("status error")
+			log.Fatal("status error")
 			handlers.AccountsInsertHandlerCore([]byte(args.json))
 		}
 	} else {
 		if args.status != 201 {
-			log.Print("status error")
+			log.Fatal("status error")
 			handlers.AccountsInsertHandlerCore([]byte(args.json))
 		}
 	}
@@ -163,12 +165,12 @@ func testAccountsUpdate(args *testRouterCallbackArgs) {
 	err := handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
 	if err != nil {
 		if args.status != err.HttpStatusCode {
-			log.Print("status error")
+			log.Fatal("status error")
 			handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
 		}
 	} else {
 		if args.status != 202 {
-			log.Print("status error")
+			log.Fatal("status error")
 			handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
 		}
 	}

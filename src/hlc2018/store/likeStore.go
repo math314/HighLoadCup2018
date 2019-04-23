@@ -53,9 +53,16 @@ func (ls *LikeStore) InsertCommonLikeWithoutRangeCheck(like *common.Like) error 
 	return nil
 }
 
-func (ls *LikeStore) InsertCommonLike(like *common.Like) error {
+func (ls *LikeStore) IsValidCommonLike(like *common.Like) error {
 	if like.AccountIdTo >= len(ls.accountStore.accounts) || like.AccountIdFrom >= len(ls.accountStore.accounts) {
 		return fmt.Errorf("liker or likee id are not found")
+	}
+	return nil
+}
+
+func (ls *LikeStore) InsertCommonLike(like *common.Like) error {
+	if err := ls.IsValidCommonLike(like); err != nil {
+		return err
 	}
 	ls.InsertLike(like.AccountIdFrom, like.AccountIdTo, like.Ts)
 	return nil
