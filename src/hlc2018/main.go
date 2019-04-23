@@ -10,6 +10,7 @@ import (
 	"hlc2018/common"
 	"hlc2018/globals"
 	"hlc2018/handlers"
+	"hlc2018/tester"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -23,7 +24,7 @@ func httpMain() {
 	}
 
 	if port == "8080" {
-		// tester.RunTest()
+		tester.RunTest()
 	}
 
 	e := echo.New()
@@ -37,9 +38,9 @@ func httpMain() {
 	e.GET("/accounts/group/", handlers.AccountsGroupHandler)
 	e.GET("/accounts/:id/recommend/", handlers.AccountsRecommendHandler)
 	e.GET("/accounts/:id/suggest/", handlers.AccountsSuggestHandler)
-	//e.POST("/accounts/new/", handlers.AccountsInsertHandler)
-	//e.POST("/accounts/:id/", handlers.AccountsUpdateHandler)
-	//e.POST("/accounts/likes/", handlers.AccountsLikesHandler)
+	e.POST("/accounts/new/", handlers.AccountsInsertHandler)
+	e.POST("/accounts/:id/", handlers.AccountsUpdateHandler)
+	e.POST("/accounts/likes/", handlers.AccountsLikesHandler)
 
 	echo.NotFoundHandler = func(context echo.Context) error {
 		return context.String(http.StatusNotFound, "")

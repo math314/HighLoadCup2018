@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"hlc2018/common"
 )
 
@@ -97,4 +98,15 @@ func (is *InterestStore) GetSuggestInterestIds(id int) map[int]int {
 	}
 
 	return mp
+}
+
+func (is *InterestStore) UpdateInterests(id int, interests []string) error {
+	if id >= len(is.pkToStringId) {
+		return fmt.Errorf("id out of range : %d", id)
+	}
+	is.StringIndex.DeleteStringsFromPk(id)
+	for _, s := range interests {
+		is.StringIndex.SetString(id, s)
+	}
+	return nil
 }

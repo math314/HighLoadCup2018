@@ -107,6 +107,7 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 	if err != nil {
 		return err
 	}
+
 	cityCode := as.cityIndex.SetString(a.ID, a.City)
 	countryCode := as.countryIndex.SetString(a.ID, a.Country)
 	as.emailToPK[a.Email] = a.ID
@@ -163,6 +164,7 @@ func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
 	//JoinedYear:    a.JoinedYear,
 
 	me := as.accounts[a.ID]
+
 	if a.Fname != "" {
 		me.Fname = a.Fname
 	}
@@ -193,13 +195,11 @@ func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
 	}
 	if a.City != "" {
 		as.cityIndex.DeleteStringsFromPk(me.ID)
-		me.City = as.cityIndex.ConvertStringToStringId(a.City)
-		as.cityIndex.SetString(me.ID, a.City)
+		me.City = as.cityIndex.SetString(me.ID, a.City)
 	}
 	if a.Country != "" {
 		as.countryIndex.DeleteStringsFromPk(me.ID)
-		me.Country = as.countryIndex.ConvertStringToStringId(a.Country)
-		as.countryIndex.SetString(me.ID, a.Country)
+		me.Country = as.countryIndex.SetString(me.ID, a.Country)
 	}
 	if a.JoinedYear.Int8 != 0 {
 		me.JoinedYear = a.JoinedYear

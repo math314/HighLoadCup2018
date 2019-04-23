@@ -40,6 +40,12 @@ func AccountsUpdateHandlerCore(idStr string, j []byte) *HlcHttpError {
 		return &HlcHttpError{http.StatusBadRequest, err}
 	}
 
+	if ra.Interests != nil {
+		if err := globals.Is.UpdateInterests(a.ID, ra.Interests); err != nil {
+			return &HlcHttpError{http.StatusBadRequest, err}
+		}
+	}
+
 	return nil
 }
 

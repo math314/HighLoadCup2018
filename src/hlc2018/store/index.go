@@ -72,7 +72,7 @@ func (si *StringIndex) SetString(pk int, s string) int {
 
 func (si *StringIndex) DeleteStringsFromPk(pk int) {
 	for currentSID, _ := range si.pkToStringId[pk] {
-		delete(si.pkToStringId[pk], currentSID)
+		delete(si.stringIdToPk[currentSID], pk)
 	}
 	si.pkToStringId[pk] = map[int]struct{}{}
 }

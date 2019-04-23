@@ -62,13 +62,15 @@ func testAccountsGroup(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansGr.Groups) != len(_gr) {
-		log.Fatal("length mismatch")
+		log.Print("length mismatch")
+		return
 	}
 
 	for i := 0; i < len(ansGr.Groups); i++ {
 		r := _gr[i].ToRawGroupResponse()
 		if !ansGr.Groups[i].Equal(r) {
-			log.Fatal("item mismatch")
+			log.Print("item mismatch")
+			return
 		}
 	}
 }
@@ -96,6 +98,7 @@ func testAccountsRecommend(args *testRouterCallbackArgs) {
 	if len(ansAfa.Accounts) != len(afa) {
 		log.Print("length mismatch")
 		handlers.AccountsRecommendCore(args.matched[1], args.url.Query())
+		return
 	}
 
 	for i := 0; i < len(ansAfa.Accounts); i++ {
@@ -128,13 +131,15 @@ func testAccountsSuggest(args *testRouterCallbackArgs) {
 	}
 
 	if len(ansAfa.Accounts) != len(afa) {
-		log.Fatal("length mismatch")
+		log.Print("length mismatch")
+		return
 	}
 
 	for i := 0; i < len(ansAfa.Accounts); i++ {
 		r := afa[i].ToRawAccount()
 		if !ansAfa.Accounts[i].Equal(r) {
-			log.Fatal("item mismatch")
+			log.Print("item mismatch")
+			return
 		}
 	}
 }
