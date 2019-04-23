@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type testRouter struct {
@@ -195,11 +194,11 @@ func RunTestCases(testCases []*testCase) {
 			routed = true
 			args := &testRouterCallbackArgs{*testCase, matched}
 
-			before := time.Now().UnixNano()
+			// before := time.Now().UnixNano()
 			route.fun(args)
-			after := time.Now().UnixNano()
-			elaspedNano := after - before
-			log.Printf("%d ms (%s)", elaspedNano/1000/1000, testCase.url.String())
+			//after := time.Now().UnixNano()
+			//elaspedNano := after - before
+			//log.Printf("%d ms (%s)", elaspedNano/1000/1000, testCase.url.String())
 
 		}
 		if !routed {
@@ -212,9 +211,9 @@ func RunTestCases(testCases []*testCase) {
 
 func RunTest() {
 	testCases1 := LoadGetPhase("./testdata/answers/phase_1_get.answ")
-	RunTestCases(testCases1)
 	testCases2 := LoadPostPhase("./testdata/ammo/phase_2_post.ammo", "./testdata/answers/phase_2_post.answ")
-	RunTestCases(testCases2)
 	testCases3 := LoadGetPhase("./testdata/answers/phase_3_get.answ")
+	RunTestCases(testCases1)
+	RunTestCases(testCases2)
 	RunTestCases(testCases3)
 }

@@ -15,7 +15,7 @@ import (
 func AccountsUpdateHandlerCore(idStr string, j []byte) *HlcHttpError {
 	var ra common.RawAccount
 	if err := json.Unmarshal([]byte(j), &ra); err != nil {
-		return &HlcHttpError{http.StatusBadRequest, err}
+		return &HlcHttpError{http.StatusNotFound, err}
 	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil {

@@ -39,8 +39,8 @@ func httpMain() {
 	e.GET("/accounts/:id/recommend/", handlers.AccountsRecommendHandler)
 	e.GET("/accounts/:id/suggest/", handlers.AccountsSuggestHandler)
 	e.POST("/accounts/new/", handlers.AccountsInsertHandler)
-	e.POST("/accounts/:id/", handlers.AccountsUpdateHandler)
 	e.POST("/accounts/likes/", handlers.AccountsLikesHandler)
+	e.POST("/accounts/:id/", handlers.AccountsUpdateHandler)
 
 	echo.NotFoundHandler = func(context echo.Context) error {
 		return context.String(http.StatusNotFound, "")
