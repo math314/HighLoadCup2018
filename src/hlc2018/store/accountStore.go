@@ -162,9 +162,6 @@ func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
 	//Country:       countryCode,
 	//JoinedYear:    a.JoinedYear,
 
-	cityCode := as.cityIndex.SetString(a.ID, a.City)
-	countryCode := as.countryIndex.SetString(a.ID, a.Country)
-
 	me := as.accounts[a.ID]
 	if a.Fname != "" {
 		me.Fname = a.Fname
@@ -207,24 +204,6 @@ func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
 	if a.JoinedYear.Int8 != 0 {
 		me.JoinedYear = a.JoinedYear
 	}
-
-	nw := &StoredAccount{
-		ID:            a.ID,
-		Fname:         a.Fname,
-		Sname:         a.Sname,
-		Email:         a.Email,
-		Premium_start: a.Premium_start,
-		Premium_end:   a.Premium_end,
-		Premium_now:   a.Premium_now,
-		Status:        a.Status,
-		Sex:           a.Sex,
-		Phone:         cp,
-		Birth:         a.Birth,
-		City:          cityCode,
-		Country:       countryCode,
-		JoinedYear:    a.JoinedYear,
-	}
-	as.accounts[a.ID] = nw
 
 	return nil
 }
