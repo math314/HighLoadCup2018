@@ -57,6 +57,7 @@ type AccountStore struct {
 	countryIndex *StringIndex
 	cityIndex    *StringIndex
 	accounts     []*StoredAccount
+	emailToPK    map[string]int
 }
 
 func NewAccountStore() *AccountStore {
@@ -64,23 +65,24 @@ func NewAccountStore() *AccountStore {
 		countryIndex: NewStringIndex(),
 		cityIndex:    NewStringIndex(),
 		accounts:     nil,
+		emailToPK:    map[string]int{},
 	}
 }
 
 func (as *AccountStore) GetCountryId(country string) int {
-	return as.countryIndex.sim.Get(country)
+	return as.countryIndex.ConvertStringToStringId(country)
 }
 
 func (as *AccountStore) IdToCountry(id int) string {
-	return as.countryIndex.sim.strings[id]
+	return as.countryIndex.StringIdToString(id)
 }
 
 func (as *AccountStore) GetCityId(country string) int {
-	return as.cityIndex.sim.Get(country)
+	return as.cityIndex.ConvertStringToStringId(country)
 }
 
 func (as *AccountStore) IdToCity(id int) string {
-	return as.cityIndex.sim.strings[id]
+	return as.cityIndex.StringIdToString(id)
 }
 
 func (as *AccountStore) ExtendSizeIfNeeded(nextSize int) {
@@ -90,17 +92,121 @@ func (as *AccountStore) ExtendSizeIfNeeded(nextSize int) {
 }
 
 func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
+	if a.ID == 0 {
+		return fmt.Errorf("id is not provided")
+	}
 	as.ExtendSizeIfNeeded(a.ID + 1)
 	if as.accounts[a.ID] != nil {
 		return fmt.Errorf("failed to add a new account : %d is already used", a.ID)
+	}
+	if other, found := as.emailToPK[a.Email]; found {
+		return fmt.Errorf("email is already registered. %d is using. your id : %d", other, a.ID)
 	}
 
 	cp, err := CompressedPhoneFromString(a.Phone)
 	if err != nil {
 		return err
 	}
-	cityCode := as.cityIndex.SetValue(a.ID, a.City)
-	countryCode := as.countryIndex.SetValue(a.ID, a.Country)
+	cityCode := as.cityIndex.SetString(a.ID, a.City)
+	countryCode := as.countryIndex.SetString(a.ID, a.Country)
+	as.emailToPK[a.Email] = a.ID
+
+	nw := &StoredAccount{
+		ID:            a.ID,
+		Fname:         a.Fname,
+		Sname:         a.Sname,
+		Email:         a.Email,
+		Premium_start: a.Premium_start,
+		Premium_end:   a.Premium_end,
+		Premium_now:   a.Premium_now,
+		Status:        a.Status,
+		Sex:           a.Sex,
+		Phone:         cp,
+		Birth:         a.Birth,
+		City:          cityCode,
+		Country:       countryCode,
+		JoinedYear:    a.JoinedYear,
+	}
+	as.accounts[a.ID] = nw
+
+	return nil
+}
+
+func (as *AccountStore) UpdateAccountCommon(a *common.Account) error {
+	if a.ID >= len(as.accounts) || as.accounts[a.ID] == nil {
+		return fmt.Errorf("%d is already not registered yet", a.ID)
+	}
+
+	// if a.Fname != ""
+	// if a.Sname != ""
+
+	if a.Email != "" {
+		if other, found := as.emailToPK[a.Email]; found {
+			return fmt.Errorf("email is already registered. %d is using. your id : %d", other, a.ID)
+		}
+	}
+
+	//Premium_start: a.Premium_start,
+	//Premium_end:   a.Premium_end,
+	//Premium_now:   a.Premium_now,
+	//Status:        a.Status,
+	//Sex:           a.Sex,
+
+	cp, err := CompressedPhoneFromString(a.Phone)
+	if err != nil {
+		return err
+	}
+
+	//Birth:         a.Birth,
+	//City:          cityCode,
+	//Country:       countryCode,
+	//JoinedYear:    a.JoinedYear,
+
+	cityCode := as.cityIndex.SetString(a.ID, a.City)
+	countryCode := as.countryIndex.SetString(a.ID, a.Country)
+
+	me := as.accounts[a.ID]
+	if a.Fname != "" {
+		me.Fname = a.Fname
+	}
+	if a.Sname != "" {
+		me.Sname = a.Sname
+	}
+	if a.Email != "" {
+		delete(as.emailToPK, me.Email)
+		me.Email = a.Email
+		as.emailToPK[me.Email] = me.ID
+	}
+	if a.Premium_start != 0 {
+		me.Premium_start = a.Premium_start
+		me.Premium_end = a.Premium_end
+		me.Premium_now = a.Premium_now
+	}
+	if a.Status != 0 {
+		me.Status = a.Status
+	}
+	if a.Sex != 0 {
+		me.Sex = a.Sex
+	}
+	if a.Phone != "" {
+		me.Phone = cp
+	}
+	if a.Birth != 0 {
+		me.Birth = a.Birth
+	}
+	if a.City != "" {
+		as.cityIndex.DeleteStringsFromPk(me.ID)
+		me.City = as.cityIndex.ConvertStringToStringId(a.City)
+		as.cityIndex.SetString(me.ID, a.City)
+	}
+	if a.Country != "" {
+		as.countryIndex.DeleteStringsFromPk(me.ID)
+		me.Country = as.countryIndex.ConvertStringToStringId(a.Country)
+		as.countryIndex.SetString(me.ID, a.Country)
+	}
+	if a.JoinedYear.Int8 != 0 {
+		me.JoinedYear = a.JoinedYear
+	}
 
 	nw := &StoredAccount{
 		ID:            a.ID,

@@ -35,6 +35,9 @@ var testRouters = []testRouter{
 	testRouter{regexp.MustCompile("/accounts/group/$"), testAccountsGroup},
 	testRouter{regexp.MustCompile("/accounts/([0-9]+)/recommend/$"), testAccountsRecommend},
 	testRouter{regexp.MustCompile("/accounts/([0-9]+)/suggest/$"), testAccountsSuggest},
+	testRouter{regexp.MustCompile("/accounts/new/$"), testAccountsInsert},
+	testRouter{regexp.MustCompile("/accounts/([0-9]+)/$"), testAccountsUpdate},
+	testRouter{regexp.MustCompile("/accounts/likes/$"), testAccountsLike},
 }
 
 func LoadGetPhase(fileName string) []*testCase {
@@ -208,8 +211,8 @@ func RunTestCases(testCases []*testCase) {
 }
 
 func RunTest() {
-	//testCases1 := LoadGetPhase("./testdata/answers/phase_1_get.answ")
-	//RunTestCases(testCases1)
+	testCases1 := LoadGetPhase("./testdata/answers/phase_1_get.answ")
+	RunTestCases(testCases1)
 	testCases2 := LoadPostPhase("./testdata/ammo/phase_2_post.ammo", "./testdata/answers/phase_2_post.answ")
 	RunTestCases(testCases2)
 	testCases3 := LoadGetPhase("./testdata/answers/phase_3_get.answ")

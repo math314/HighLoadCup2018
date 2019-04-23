@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	Ls = store.NewLikeStore()
-	Is = store.NewInterestStore()
 	As = store.NewAccountStore()
+	Ls = store.NewLikeStore(As)
+	Is = store.NewInterestStore()
 )

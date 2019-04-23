@@ -136,3 +136,46 @@ func testAccountsSuggest(args *testRouterCallbackArgs) {
 		}
 	}
 }
+
+func testAccountsInsert(args *testRouterCallbackArgs) {
+	err := handlers.AccountsInsertHandlerCore([]byte(args.json))
+	if err != nil {
+		if args.status != 400 {
+			log.Print("status error")
+			handlers.AccountsInsertHandlerCore([]byte(args.json))
+		}
+	} else {
+		if args.status != 201 {
+			log.Print("status error")
+			handlers.AccountsInsertHandlerCore([]byte(args.json))
+		}
+	}
+}
+
+func testAccountsUpdate(args *testRouterCallbackArgs) {
+	err := handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
+	if err != nil {
+		if args.status != err.HttpStatusCode {
+			log.Print("status error")
+			handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
+		}
+	} else {
+		if args.status != 202 {
+			log.Print("status error")
+			handlers.AccountsUpdateHandlerCore(args.matched[1], []byte(args.json))
+		}
+	}
+}
+
+func testAccountsLike(args *testRouterCallbackArgs) {
+	err := handlers.AccountsLikesHandlerCore([]byte(args.json))
+	if err != nil {
+		if args.status != 400 {
+			log.Fatal("status error")
+		}
+	} else {
+		if args.status != 202 {
+			log.Fatal("status error")
+		}
+	}
+}

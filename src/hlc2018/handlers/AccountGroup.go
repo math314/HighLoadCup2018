@@ -77,7 +77,6 @@ func joinedGroupParser(param string, agp *AccountGroupParam) error {
 		return fmt.Errorf("failed to parse joined (%s)", param)
 	}
 	jy := common.ToJoinedYear(joined)
-
 	agp.joinedYear = jy
 
 	return nil

@@ -37,9 +37,9 @@ func (sim *StringIdMapper) Get(s string) int {
 }
 
 type StringIndex struct {
-	sim       *StringIdMapper
-	idToValue []map[int]struct{}
-	valueToId []map[int]struct{}
+	sim          *StringIdMapper
+	pkToStringId []map[int]struct{}
+	stringIdToPk []map[int]struct{}
 }
 
 func NewStringIndex() *StringIndex {
@@ -49,23 +49,38 @@ func NewStringIndex() *StringIndex {
 }
 
 func (si *StringIndex) ExtendSizeIfNeeded(nextSize int) {
-	for len(si.idToValue) < nextSize {
-		si.idToValue = append(si.idToValue, map[int]struct{}{})
+	for len(si.pkToStringId) < nextSize {
+		si.pkToStringId = append(si.pkToStringId, map[int]struct{}{})
 	}
 }
 
 func (si *StringIndex) insertIfNeeded(s string) int {
 	val, added := si.sim.InsertStringIfNeeded(s)
 	if added {
-		si.valueToId = append(si.valueToId, map[int]struct{}{})
+		si.stringIdToPk = append(si.stringIdToPk, map[int]struct{}{})
 	}
 	return val
 }
 
-func (si *StringIndex) SetValue(id int, s string) int {
-	si.ExtendSizeIfNeeded(id + 1)
+func (si *StringIndex) SetString(pk int, s string) int {
+	si.ExtendSizeIfNeeded(pk + 1)
 	insertedId := si.insertIfNeeded(s)
-	si.idToValue[id][insertedId] = struct{}{}
-	si.valueToId[insertedId][id] = struct{}{}
+	si.pkToStringId[pk][insertedId] = struct{}{}
+	si.stringIdToPk[insertedId][pk] = struct{}{}
 	return insertedId
+}
+
+func (si *StringIndex) DeleteStringsFromPk(pk int) {
+	for currentSID, _ := range si.pkToStringId[pk] {
+		delete(si.pkToStringId[pk], currentSID)
+	}
+	si.pkToStringId[pk] = map[int]struct{}{}
+}
+
+func (si *StringIndex) ConvertStringToStringId(s string) int {
+	return si.sim.Get(s)
+}
+
+func (si *StringIndex) StringIdToString(sid int) string {
+	return si.sim.strings[sid]
 }

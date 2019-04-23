@@ -119,27 +119,37 @@ func init() {
 	}
 }
 
-func (rawAccount *RawAccount) ToAccount() *Account {
+func (rawAccount *RawAccount) ToAccount() (*Account, error) {
 	var a Account
 	a.ID = rawAccount.ID
 	a.Fname = rawAccount.Fname
 	a.Sname = rawAccount.Sname
 	a.Email = rawAccount.Email
+	if rawAccount.Email != "" {
+		if strings.Count(rawAccount.Email, "@") != 1 {
+			return nil, fmt.Errorf("email doesn't have `@`: %s", rawAccount.Email)
+		}
+	}
 	a.Status = StatusFromString(rawAccount.Status)
-
+	if a.Status == 0 && rawAccount.Status != "" {
+		return nil, fmt.Errorf("%s is not valid status", rawAccount.Status)
+	}
 	if rawAccount.Premium != nil {
 		a.Premium_start = rawAccount.Premium.Start
 		a.Premium_end = rawAccount.Premium.Finish
 		a.Premium_now = a.Premium_start <= PREMIUM_NOW_UNIX && PREMIUM_NOW_UNIX <= a.Premium_end
 	}
 	a.Sex = SexFromString(rawAccount.Sex)
+	if a.Sex == 0 && rawAccount.Sex != "" {
+		return nil, fmt.Errorf("%s is not valid sex", rawAccount.Sex)
+	}
 	a.Phone = rawAccount.Phone
 	a.Birth = rawAccount.Birth
 	a.City = rawAccount.City
 	a.Country = rawAccount.Country
 	a.JoinedYear = ToJoinedYear(time.Unix(int64(rawAccount.Joined), 0).Year())
 
-	return &a
+	return &a, nil
 }
 
 func (rawAccount *RawAccount) ToInterests() []*Interest {

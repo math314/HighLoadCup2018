@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"hlc2018/common"
 	"math"
 	"sort"
@@ -16,12 +17,15 @@ type storedLikeFloat64 struct {
 }
 
 type LikeStore struct {
+	accountStore      *AccountStore
 	forward, backward [][]storedLike
 	forwardMap        []map[int]struct{}
 }
 
-func NewLikeStore() *LikeStore {
-	return &LikeStore{}
+func NewLikeStore(accountStore *AccountStore) *LikeStore {
+	return &LikeStore{
+		accountStore: accountStore,
+	}
 }
 
 func (ls *LikeStore) ExtendSizeIfNeeded(nextSize int) {
@@ -44,8 +48,12 @@ func (ls *LikeStore) InsertLike(from, to, ts int) {
 	ls.backward[to] = append(ls.backward[to], storedLike{from, ts})
 }
 
-func (ls *LikeStore) InsertCommonLike(like *common.Like) {
+func (ls *LikeStore) InsertCommonLike(like *common.Like) error {
+	if like.AccountIdTo >= len(ls.accountStore.accounts) || like.AccountIdFrom >= len(ls.accountStore.accounts) {
+		return fmt.Errorf("liker or likee id are not found")
+	}
 	ls.InsertLike(like.AccountIdFrom, like.AccountIdTo, like.Ts)
+	return nil
 }
 
 func (ls *LikeStore) CheckContainAllLikes(id int, liked []int) bool {

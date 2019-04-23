@@ -13,7 +13,7 @@ func NewInterestStore() *InterestStore {
 }
 
 func (is *InterestStore) InsertCommonInterest(interest *common.Interest) {
-	is.SetValue(interest.AccountId, interest.Interest)
+	is.SetString(interest.AccountId, interest.Interest)
 }
 
 func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} {
@@ -24,9 +24,9 @@ func (is *InterestStore) ContainsAllFromInterests(vs []string) map[int]struct{} 
 			return map[int]struct{}{}
 		}
 		if mp == nil {
-			mp = is.valueToId[interestId]
+			mp = is.stringIdToPk[interestId]
 		} else {
-			mp = common.MapIntersect(mp, is.valueToId[interestId])
+			mp = common.MapIntersect(mp, is.stringIdToPk[interestId])
 		}
 	}
 	return mp
@@ -39,7 +39,7 @@ func (is *InterestStore) ContainsAnyFromInterests(vs []string) map[int]struct{} 
 		if !found {
 			continue
 		}
-		for k, _ := range is.valueToId[interestId] {
+		for k, _ := range is.stringIdToPk[interestId] {
 			mp[k] = struct{}{}
 		}
 	}
@@ -52,7 +52,7 @@ func (is *InterestStore) ContainsAll(id int, vs []string) bool {
 		if !found {
 			return false
 		}
-		if _, ok := is.idToValue[id][interestId]; !ok {
+		if _, ok := is.pkToStringId[id][interestId]; !ok {
 			return false
 		}
 	}
@@ -65,7 +65,7 @@ func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 		if !found {
 			continue
 		}
-		if _, ok := is.idToValue[id][interestId]; ok {
+		if _, ok := is.pkToStringId[id][interestId]; ok {
 			return true
 		}
 	}
@@ -74,7 +74,7 @@ func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 
 func (is *InterestStore) GetInterestStrings(id int) []string {
 	ret := []string{}
-	for interestId, _ := range is.idToValue[id] {
+	for interestId, _ := range is.pkToStringId[id] {
 		ret = append(ret, is.sim.strings[interestId])
 	}
 	return ret
@@ -82,7 +82,7 @@ func (is *InterestStore) GetInterestStrings(id int) []string {
 
 func (is *InterestStore) GetCommonInterests(id int) []*common.Interest {
 	var ret []*common.Interest
-	for interestId, _ := range is.idToValue[id] {
+	for interestId, _ := range is.pkToStringId[id] {
 		ret = append(ret, &common.Interest{id, is.sim.strings[interestId]})
 	}
 	return ret
@@ -90,8 +90,8 @@ func (is *InterestStore) GetCommonInterests(id int) []*common.Interest {
 
 func (is *InterestStore) GetSuggestInterestIds(id int) map[int]int {
 	mp := map[int]int{}
-	for interestId, _ := range is.idToValue[id] {
-		for k, _ := range is.valueToId[interestId] {
+	for interestId, _ := range is.pkToStringId[id] {
+		for k, _ := range is.stringIdToPk[interestId] {
 			mp[k]++
 		}
 	}
