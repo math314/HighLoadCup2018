@@ -50,7 +50,7 @@ type StoredAccount struct {
 	Birth         int
 	City          int
 	Country       int
-	JoinedYear    int8
+	JoinedYear    common.JoinedYear
 }
 
 type AccountStore struct {
@@ -116,7 +116,7 @@ func (as *AccountStore) InsertAccountCommon(a *common.Account) error {
 		Birth:         a.Birth,
 		City:          cityCode,
 		Country:       countryCode,
-		JoinedYear:    a.JoinedYear.Int8,
+		JoinedYear:    a.JoinedYear,
 	}
 	as.accounts[a.ID] = nw
 

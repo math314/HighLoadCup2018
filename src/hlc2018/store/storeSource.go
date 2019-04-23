@@ -39,3 +39,19 @@ func (ss *ArrayStoreSource) Next() bool {
 func (ss *ArrayStoreSource) Value() int {
 	return ss.src[ss.id]
 }
+
+type StoreFilterFunc func(id int) bool
+
+func ApplyFilter(ss StoreSource, filter StoreFilterFunc, limit int) []int {
+	var ret []int
+	for ss.Next() {
+		val := ss.Value()
+		if filter(val) {
+			ret = append(ret, val)
+			if len(ret) == limit {
+				return ret
+			}
+		}
+	}
+	return ret
+}

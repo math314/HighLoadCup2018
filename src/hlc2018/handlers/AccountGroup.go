@@ -1,15 +1,16 @@
 package handlers
 
 import (
-	"bytes"
 	"database/sql"
 	"fmt"
 	"github.com/labstack/echo"
 	"hlc2018/common"
 	"hlc2018/globals"
+	"hlc2018/store"
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,8 +18,6 @@ import (
 
 type AccountGroupParam struct {
 	keys            map[string]struct{}
-	froms           map[string]struct{}
-	wheres          bytes.Buffer
 	limit           int
 	order           int
 	sexEq           int8
@@ -31,17 +30,6 @@ type AccountGroupParam struct {
 	birthYear       int
 }
 
-func (agp *AccountGroupParam) addFrom(s string) {
-	agp.froms[s] = struct{}{}
-}
-
-func (agp *AccountGroupParam) addWhere(s string) {
-	if agp.wheres.Len() != 0 {
-		agp.wheres.WriteString(" AND ")
-	}
-	agp.wheres.WriteString(s)
-}
-
 type AccountGroupFunc func(param string, agp *AccountGroupParam) error
 
 func sexGroupParser(param string, agp *AccountGroupParam) error {
@@ -49,8 +37,6 @@ func sexGroupParser(param string, agp *AccountGroupParam) error {
 	if sex == 0 {
 		return fmt.Errorf("%s is not valid sex", param)
 	}
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.sex = %d", sex))
 	agp.sexEq = sex
 	return nil
 }
@@ -65,15 +51,11 @@ func likesGroupParser(param string, agp *AccountGroupParam) error {
 		liker = []int{-1}
 	}
 
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntArrayJoin(liker, ",")))
 	agp.likeContain = like
 	return nil
 }
 
 func countryGroupParser(param string, agp *AccountGroupParam) error {
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.country = \"%s\"", param))
 	agp.countryEq = param
 	return nil
 }
@@ -85,14 +67,6 @@ func keysGroupParser(param string, agp *AccountGroupParam) error {
 			return fmt.Errorf("invalid keys (%s)", k)
 		}
 		agp.keys[k] = struct{}{}
-
-		if k == "interests" {
-			agp.addFrom("accounts")
-			agp.addFrom("interests")
-			agp.addWhere("a.id = i.account_id")
-		} else {
-			agp.addFrom("accounts")
-		}
 	}
 	return nil
 }
@@ -104,8 +78,6 @@ func joinedGroupParser(param string, agp *AccountGroupParam) error {
 	}
 	jy := common.ToJoinedYear(joined)
 
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.joined_year = %d", jy.Int8))
 	agp.joinedYear = jy
 
 	return nil
@@ -116,8 +88,6 @@ func statusGroupParser(param string, agp *AccountGroupParam) error {
 	if status == 0 {
 		return fmt.Errorf("%s is not valid status", param)
 	}
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("a.status = %d", status))
 	agp.statusEq = status
 	return nil
 }
@@ -147,12 +117,10 @@ func limitGroupParser(param string, agp *AccountGroupParam) error {
 }
 
 func interestsGroupParser(param string, agp *AccountGroupParam) error {
-	agp.addFrom("accounts")
 	ids := globals.Is.ContainsAnyFromInterests([]string{param})
 	if len(ids) == 0 {
 		ids[-1] = struct{}{}
 	}
-	agp.addWhere(fmt.Sprintf("a.id in (%s)", common.IntSetJoin(ids, ",")))
 	agp.interestContain = param
 	return nil
 }
@@ -163,21 +131,12 @@ func birthGroupParser(param string, agp *AccountGroupParam) error {
 		return fmt.Errorf("failed to parse birth (%s)", param)
 	}
 
-	from := time.Date(birth, 1, 1, 0, 0, 0, 0, time.UTC)
-	after := time.Date(birth+1, 1, 1, 0, 0, 0, 0, time.UTC)
-
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("birth >= %d", from.Unix()))
-	agp.addWhere(fmt.Sprintf("birth < %d", after.Unix()))
 	agp.birthYear = birth
-
 	return nil
 }
 
 func cityGroupParser(param string, agp *AccountGroupParam) error {
-	agp.addFrom("accounts")
-	agp.addWhere(fmt.Sprintf("city = \"%s\"", param))
-	agp.countryEq = param
+	agp.cityEq = param
 	return nil
 }
 
@@ -214,15 +173,19 @@ type RawGroupResponses struct {
 }
 
 type GroupResponse struct {
-	Sex       int            `db:"sex"`
-	Status    int            `db:"status"`
-	Interests string         `db:"interests"`
-	Country   sql.NullString `db:"country"`
-	City      sql.NullString `db:"city"`
-	Count     int            `db:"count"`
+	Sex       int8
+	Status    int8
+	Interests string
+	Country   sql.NullString
+	City      sql.NullString
 }
 
-func (gr *GroupResponse) ToRawGroupResponse() *RawGroupResponse {
+type GroupResponseCount struct {
+	GroupResponse
+	Count int
+}
+
+func (gr *GroupResponseCount) ToRawGroupResponse() *RawGroupResponse {
 	r := RawGroupResponse{}
 	if gr.Sex != 0 {
 		r.Sex = common.SEXES[gr.Sex-1]
@@ -259,13 +222,181 @@ func (l *RawGroupResponse) Equal(r *RawGroupResponse) bool {
 	return true
 }
 
+func SplitGroupParamsIntoStoreAndFilter(originalAgp *AccountGroupParam) (*AccountGroupParam, store.StoreSource) {
+	agp := *originalAgp
+	//?
+	if agp.likeContain != 0 {
+		liker := globals.Ls.IdsContainAllLikes([]int{agp.likeContain})
+
+		agp.likeContain = 0
+		return &agp, store.NewArrayStoreSource(liker)
+	}
+
+	// 1/30 if length == 1
+	if len(agp.interestContain) > 0 {
+		mp := globals.Is.ContainsAllFromInterests([]string{agp.interestContain})
+
+		var ids []int
+		for id, _ := range mp {
+			ids = append(ids, id)
+		}
+
+		agp.interestContain = ""
+		return &agp, store.NewArrayStoreSource(ids)
+	}
+
+	// default because there're no index
+	return &agp, globals.As.NewRangeAccountStoreSource()
+}
+
+func GenFilterFromAccountsGroupParams(agp *AccountGroupParam) store.StoreFilterFunc {
+	return func(id int) bool {
+		me := globals.As.GetStoredAccountWithoutError(id)
+
+		if agp.likeContain != 0 {
+			result := globals.Ls.CheckContainAllLikes(id, []int{agp.likeContain})
+			if !result {
+				return false
+			}
+		}
+
+		if agp.interestContain != "" {
+			result := globals.Is.ContainsAny(id, []string{agp.interestContain})
+			if !result {
+				return false
+			}
+		}
+
+		if agp.sexEq != 0 {
+			if me.Sex != agp.sexEq {
+				return false
+			}
+		}
+
+		if agp.countryEq != "" {
+			if me.Country != globals.As.GetCountryId(agp.countryEq) {
+				return false
+			}
+		}
+
+		if agp.cityEq != "" {
+			if me.City != globals.As.GetCityId(agp.cityEq) {
+				return false
+			}
+		}
+
+		if agp.statusEq != 0 {
+			if me.Status != agp.statusEq {
+				return false
+			}
+		}
+
+		if agp.joinedYear.Int8 != 0 {
+			if me.JoinedYear != agp.joinedYear {
+				return false
+			}
+		}
+
+		if agp.birthYear != 0 {
+			from := int(time.Date(agp.birthYear, 1, 1, 0, 0, 0, 0, time.UTC).Unix())
+			to := int(time.Date(agp.birthYear+1, 1, 1, 0, 0, 0, 0, time.UTC).Unix())
+			ok := from <= me.Birth && me.Birth < to
+			if !ok {
+				return false
+			}
+
+		}
+
+		return true
+	}
+}
+
+func filterIdsFromGroupParam(originalAgp *AccountGroupParam) []int {
+	agp, ss := SplitGroupParamsIntoStoreAndFilter(originalAgp)
+	sff := GenFilterFromAccountsGroupParams(agp)
+
+	// filter without limit
+	ret := store.ApplyFilter(ss, sff, 1e8)
+
+	return ret
+}
+
+func grouping(ids []int, agp *AccountGroupParam) []GroupResponseCount {
+	mp := map[GroupResponse]int{}
+	for _, id := range ids {
+		a := globals.As.GetStoredAccountWithoutError(id)
+		gr := GroupResponse{}
+		var interests []string
+		for key, _ := range agp.keys {
+			switch key {
+			case "country":
+				gr.Country = sql.NullString{globals.As.IdToCountry(a.Country), true}
+			case "city":
+				gr.City = sql.NullString{globals.As.IdToCity(a.City), true}
+			case "sex":
+				gr.Sex = a.Sex
+			case "status":
+				gr.Status = a.Status
+			case "interests":
+				interests = globals.Is.GetInterestStrings(id)
+			}
+		}
+		if interests == nil {
+			mp[gr]++
+		} else {
+			for _, i := range interests {
+				gr.Interests = i
+				mp[gr]++
+			}
+		}
+	}
+
+	ret := []GroupResponseCount{}
+	for k, v := range mp {
+		ret = append(ret, GroupResponseCount{k, v})
+	}
+
+	return ret
+}
+
+func sorting(grc []GroupResponseCount, agp *AccountGroupParam) {
+	less := func(i, j int) bool {
+		if grc[i].Count != grc[j].Count {
+			return grc[i].Count < grc[j].Count
+		}
+		if grc[i].Country != grc[j].Country {
+			return grc[i].Country.String < grc[j].Country.String
+		}
+		if grc[i].City != grc[j].City {
+			return grc[i].City.String < grc[j].City.String
+		}
+		if grc[i].Interests != grc[j].Interests {
+			return grc[i].Interests < grc[j].Interests
+		}
+		if grc[i].Sex != grc[j].Sex {
+			return grc[i].Sex < grc[j].Sex
+		}
+		if grc[i].Status != grc[j].Status {
+			return grc[i].Status < grc[j].Status
+		}
+		return false
+	}
+
+	sortFunc := less
+	if agp.order == -1 {
+		sortFunc = func(i, j int) bool {
+			return less(j, i)
+		}
+	}
+
+	sort.Slice(grc, sortFunc)
+}
+
 func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err error) {
 	agp = &AccountGroupParam{
-		keys:   map[string]struct{}{},
-		froms:  map[string]struct{}{},
-		wheres: bytes.Buffer{},
-		limit:  -1,
-		order:  0,
+		keys:  map[string]struct{}{},
+		limit: -1,
+		order: 0,
 	}
 
 	for field, param := range queryParams {
@@ -305,74 +436,22 @@ func accountsGroupParser(queryParams url.Values) (agp *AccountGroupParam, err er
 	return
 }
 
-func AccountsGroupCore(queryParams url.Values) ([]GroupResponse, *HlcHttpError) {
+func AccountsGroupCore(queryParams url.Values) ([]GroupResponseCount, *HlcHttpError) {
 	agp, err := accountsGroupParser(queryParams)
 	if err != nil {
 		log.Print(err)
 		return nil, &HlcHttpError{http.StatusBadRequest, err}
 	}
 
-	selectCluster := bytes.Buffer{}
-	selectCluster.WriteString("COUNT(*) AS `count`")
-	for k, _ := range agp.keys {
-		selectCluster.WriteString(", ")
-		if k == "interests" {
-			selectCluster.WriteString("i.interest AS interests")
-		} else {
-			selectCluster.WriteString("a." + k + " AS " + k)
-		}
+	ids := filterIdsFromGroupParam(agp)
+	grc := grouping(ids, agp)
+	sorting(grc, agp)
+
+	limit := agp.limit
+	if limit > len(grc) {
+		limit = len(grc)
 	}
-
-	fromCluster := bytes.Buffer{}
-	for k, _ := range agp.froms {
-		if fromCluster.Len() != 0 {
-			fromCluster.WriteString(", ")
-		}
-
-		fromCluster.WriteString(k + " AS ")
-		fromCluster.WriteByte(k[0])
-	}
-
-	whereClusterWithWHERE := ""
-	if agp.wheres.Len() != 0 {
-		whereClusterWithWHERE = "WHERE " + agp.wheres.String()
-	}
-
-	groupByCluster := bytes.Buffer{}
-	for k, _ := range agp.keys {
-		if groupByCluster.Len() != 0 {
-			groupByCluster.WriteString(", ")
-		}
-		groupByCluster.WriteString(k)
-	}
-
-	orderByCluster := bytes.Buffer{}
-	{
-		order := "ASC"
-		if agp.order == -1 {
-			order = "DESC"
-		}
-		orderByCluster.WriteString("`count` " + order)
-		for _, v := range []string{"country", "city", "interests", "sex", "status"} {
-			if _, ok := agp.keys[v]; !ok {
-				continue
-			}
-			orderByCluster.WriteString(", " + v + " " + order)
-		}
-	}
-
-	query := fmt.Sprintf("SELECT %s FROM %s /*WHERE*/%s GROUP BY %s ORDER BY %s LIMIT %d",
-		selectCluster.String(), fromCluster.String(), whereClusterWithWHERE, groupByCluster.String(),
-		orderByCluster.String(), agp.limit)
-	log.Printf("query := %s", query)
-
-	var grs []GroupResponse
-	if err := globals.DB.Select(&grs, query); err != nil {
-		log.Print(err)
-		return nil, &HlcHttpError{http.StatusInternalServerError, err}
-	}
-
-	return grs, nil
+	return grc[:limit], nil
 }
 
 func AccountsGroupHandler(c echo.Context) error {

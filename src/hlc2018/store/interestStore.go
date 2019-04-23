@@ -72,6 +72,14 @@ func (is *InterestStore) ContainsAny(id int, vs []string) bool {
 	return false
 }
 
+func (is *InterestStore) GetInterestStrings(id int) []string {
+	ret := []string{}
+	for interestId, _ := range is.idToValue[id] {
+		ret = append(ret, is.sim.strings[interestId])
+	}
+	return ret
+}
+
 func (is *InterestStore) GetCommonInterests(id int) []*common.Interest {
 	var ret []*common.Interest
 	for interestId, _ := range is.idToValue[id] {

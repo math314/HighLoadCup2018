@@ -388,22 +388,6 @@ func accountsFilterParser(queryParams url.Values) (afp *AccountsFilterParams, er
 	return
 }
 
-type StoreFilterFunc func(id int) bool
-
-func ApplyFilter(ss store.StoreSource, filter StoreFilterFunc, limit int) []int {
-	var ret []int
-	for ss.Next() {
-		val := ss.Value()
-		if filter(val) {
-			ret = append(ret, val)
-			if len(ret) == limit {
-				return ret
-			}
-		}
-	}
-	return ret
-}
-
 func IsNullStoreFilterString(val string, b Tribool) bool {
 	if b == TTrue {
 		return val == ""
@@ -426,7 +410,7 @@ func IsNullStoreFilterInt(val int, b Tribool) bool {
 	}
 }
 
-func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFunc {
+func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) store.StoreFilterFunc {
 	return func(id int) bool {
 		if len(afp.likeContains) > 0 {
 			result := globals.Ls.CheckContainAllLikes(id, afp.likeContains)
@@ -637,7 +621,7 @@ func GenFilterFromAccountsFilterParams(afp *AccountsFilterParams) StoreFilterFun
 	}
 }
 
-func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*AccountsFilterParams, store.StoreSource) {
+func SplitFilterParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*AccountsFilterParams, store.StoreSource) {
 	afp := *originalAfp
 	//?
 	if len(afp.likeContains) > 0 {
@@ -707,11 +691,11 @@ func SplitParamsIntoStoreAndFilter(originalAfp *AccountsFilterParams) (*Accounts
 	return &afp, globals.As.NewRangeAccountStoreSource()
 }
 
-func filterIds(originalAfp *AccountsFilterParams) []int {
-	afp, ss := SplitParamsIntoStoreAndFilter(originalAfp)
+func filterIdsFromFilterParam(originalAfp *AccountsFilterParams) []int {
+	afp, ss := SplitFilterParamsIntoStoreAndFilter(originalAfp)
 	sff := GenFilterFromAccountsFilterParams(afp)
 
-	ret := ApplyFilter(ss, sff, afp.limit)
+	ret := store.ApplyFilter(ss, sff, afp.limit)
 
 	return ret
 }
@@ -722,7 +706,7 @@ func AccountsFilterCore(queryParams url.Values) (*common.AccountContainer, *HlcH
 		log.Print(err)
 		return nil, &HlcHttpError{http.StatusBadRequest, err}
 	}
-	ansIds := filterIds(afp)
+	ansIds := filterIdsFromFilterParam(afp)
 
 	afas := common.AccountContainer{}
 	for _, id := range ansIds {

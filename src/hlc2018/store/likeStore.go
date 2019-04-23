@@ -62,6 +62,9 @@ func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
 	minVal := len(ls.forward)
 
 	for _, id := range ids {
+		if len(ls.backward) <= id {
+			return []int{}
+		}
 		if minVal > len(ls.backward[id]) {
 			minId = id
 			minVal = len(ls.backward[id])
@@ -88,6 +91,9 @@ func (ls *LikeStore) IdsContainAllLikes(ids []int) []int {
 func (ls *LikeStore) IdsContainAnyLikes(ids []int) []int {
 	mp := map[int]struct{}{}
 	for _, id := range ids {
+		if len(ls.backward) <= id {
+			continue
+		}
 		for _, k := range ls.backward[id] {
 			mp[k.to] = struct{}{}
 		}
